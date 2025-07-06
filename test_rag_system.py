@@ -206,7 +206,7 @@ def test_rag_agent():
 
 def run_all_tests():
     """Run all tests"""
-    print("🧪 Starting RAG System Tests")
+    print("🧪 Starting RAG Template System Tests")
     print("=" * 50)
     
     tests = [
@@ -253,7 +253,7 @@ def run_all_tests():
     print(f"\nOverall: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All tests passed! Your RAG system is ready to use.")
+        print("🎉 All tests passed! Your RAG template is ready to use.")
     else:
         print("⚠️  Some tests failed. Please check the errors above.")
     

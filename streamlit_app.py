@@ -21,8 +21,8 @@ from src.nvidia_embeddings import NVIDIAEmbeddings
 
 # Page configuration
 st.set_page_config(
-    page_title="DIFC Legal RAG Assistant",
-    page_icon="⚖️",
+    page_title="RAG Assistant - NVIDIA NemoRetriever",
+    page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -138,8 +138,8 @@ def display_header():
     """Display the main header"""
     st.markdown("""
     <div class="main-header">
-        <h1>⚖️ DIFC Legal RAG Assistant</h1>
-        <p>AI-Powered Legal Research for Dubai International Financial Centre Laws</p>
+        <h1>🤖 RAG Assistant - NVIDIA NemoRetriever</h1>
+        <p>AI-Powered Document Q&A System with Advanced Retrieval</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -167,17 +167,17 @@ def display_sidebar(rag_agent):
         st.sidebar.markdown("### 🤖 AI Models")
         st.sidebar.info("**Embedding**: nvidia/nv-embed-v1\n**LLM**: meta/llama-3.1-8b-instruct")
         
-        # Legal areas covered
-        st.sidebar.markdown("### 📖 Legal Areas Covered")
-        legal_areas = [
-            "Employment Law", "Contract Law", "Data Protection Law",
-            "Digital Assets Law", "Insolvency Law", "Partnership Law",
-            "Intellectual Property Law", "Court Law", "Security Law",
-            "Obligations Law", "Foundations Law", "Electronic Transactions"
+        # Document types supported
+        st.sidebar.markdown("### 📖 Document Types Supported")
+        doc_types = [
+            "PDF Documents", "Research Papers", "Legal Documents",
+            "Technical Manuals", "Corporate Policies", "Academic Papers",
+            "Training Materials", "Compliance Documents", "Reports",
+            "Contracts", "Specifications", "User Guides"
         ]
-        
-        for area in legal_areas:
-            st.sidebar.markdown(f"• {area}")
+
+        for doc_type in doc_types:
+            st.sidebar.markdown(f"• {doc_type}")
             
     else:
         st.sidebar.markdown("""
@@ -190,14 +190,14 @@ def display_sidebar(rag_agent):
 
 def display_chat_interface(rag_agent):
     """Display the main chat interface"""
-    st.markdown("## 💬 Ask Your Legal Question")
-    
+    st.markdown("## 💬 Ask Your Question")
+
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
         st.session_state.messages.append({
             "role": "assistant",
-            "content": "Hello! I'm your DIFC Legal RAG Assistant. I can help you with questions about Dubai International Financial Centre laws. What would you like to know?",
+            "content": "Hello! I'm your RAG Assistant powered by NVIDIA NemoRetriever. I can help you find information from your document collection. What would you like to know?",
             "sources": [],
             "processing_time": 0
         })
@@ -207,14 +207,14 @@ def display_chat_interface(rag_agent):
         if message["role"] == "user":
             st.markdown(f"""
             <div class="chat-message user-message">
-                <strong>🧑‍💼 You:</strong><br>
+                <strong>👤 You:</strong><br>
                 {message["content"]}
             </div>
             """, unsafe_allow_html=True)
         else:
             st.markdown(f"""
             <div class="chat-message assistant-message">
-                <strong>⚖️ Legal Assistant:</strong><br>
+                <strong>🤖 AI Assistant:</strong><br>
                 {message["content"]}
             </div>
             """, unsafe_allow_html=True)
@@ -224,14 +224,14 @@ def display_chat_interface(rag_agent):
                 display_sources(message["sources"], message.get("processing_time", 0))
     
     # Chat input
-    if prompt := st.chat_input("Ask a question about DIFC laws..."):
+    if prompt := st.chat_input("Ask a question about your documents..."):
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
         
         # Display user message immediately
         st.markdown(f"""
         <div class="chat-message user-message">
-            <strong>🧑‍💼 You:</strong><br>
+            <strong>👤 You:</strong><br>
             {prompt}
         </div>
         """, unsafe_allow_html=True)
@@ -239,7 +239,7 @@ def display_chat_interface(rag_agent):
         if rag_agent:
             try:
                 # Show loading spinner
-                with st.spinner("🔍 Searching legal documents..."):
+                with st.spinner("🔍 Searching documents..."):
                     # Get response from RAG agent
                     response = rag_agent.ask_question(prompt)
 
@@ -259,7 +259,7 @@ def display_chat_interface(rag_agent):
                 # Display assistant response
                 st.markdown(f"""
                 <div class="chat-message assistant-message">
-                    <strong>⚖️ Legal Assistant:</strong><br>
+                    <strong>🤖 AI Assistant:</strong><br>
                     {response.answer}
                 </div>
                 """, unsafe_allow_html=True)
@@ -441,27 +441,27 @@ def display_document_stats(rag_agent):
     with col4:
         st.metric("💾 Index Size", "Ready" if stats.get('index_exists') else "Not Found")
 
-    # Legal areas breakdown
-    st.markdown("### 📖 Legal Areas Coverage")
-    legal_areas = {
-        "Employment Law": "👥",
-        "Contract Law": "📝",
-        "Data Protection Law": "🛡️",
-        "Digital Assets Law": "💎",
-        "Insolvency Law": "💼",
-        "Partnership Law": "🤝",
-        "Intellectual Property Law": "🔒",
-        "Court Law": "⚖️",
-        "Security Law": "🔐",
-        "Obligations Law": "📜",
-        "Foundations Law": "🏛️",
-        "Electronic Transactions": "💻"
+    # Document types breakdown
+    st.markdown("### 📖 Document Types & Use Cases")
+    doc_categories = {
+        "Research Papers": "📚",
+        "Technical Documentation": "🔧",
+        "Legal Documents": "⚖️",
+        "Corporate Policies": "🏢",
+        "Training Materials": "🎓",
+        "User Manuals": "📖",
+        "Compliance Documents": "✅",
+        "Reports & Analysis": "📊",
+        "Contracts & Agreements": "📝",
+        "Specifications": "🔍",
+        "Academic Papers": "🎓",
+        "Reference Materials": "📚"
     }
 
     cols = st.columns(3)
-    for i, (area, emoji) in enumerate(legal_areas.items()):
+    for i, (category, emoji) in enumerate(doc_categories.items()):
         with cols[i % 3]:
-            st.markdown(f"{emoji} **{area}**")
+            st.markdown(f"{emoji} **{category}**")
 
     # System health
     st.markdown("### 🔧 System Health")
@@ -509,12 +509,12 @@ def main():
         st.markdown("### 💡 Quick Tips")
         st.info("""
         **Sample Questions:**
-        • What is DIFC?
-        • Employment contract requirements
-        • Data protection principles
-        • Partnership formation process
-        • Intellectual property rights
-        • Court procedures
+        • What is the main topic of the documents?
+        • Summarize the key points
+        • What are the requirements mentioned?
+        • How does [concept A] relate to [concept B]?
+        • What are the benefits described?
+        • Explain the process for [specific topic]
         """)
 
         # Advanced features

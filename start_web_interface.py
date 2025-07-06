@@ -74,7 +74,7 @@ def check_environment():
 
 def launch_interface():
     """Launch the Streamlit web interface"""
-    print("🚀 Launching DIFC Legal RAG Web Interface...")
+    print("🚀 Launching RAG Web Interface...")
     print("🌐 The interface will open in your default browser")
     print("📱 Access URLs:")
     print("   - Local: http://localhost:8501")
@@ -95,7 +95,7 @@ def launch_interface():
             "--server.enableXsrfProtection", "false"
         ])
     except KeyboardInterrupt:
-        print("\n\n👋 DIFC Legal RAG Web Interface stopped.")
+        print("\n\n👋 RAG Web Interface stopped.")
         print("Thank you for using the system!")
     except Exception as e:
         print(f"\n❌ Error launching interface: {str(e)}")
@@ -103,7 +103,7 @@ def launch_interface():
 
 def main():
     """Main function"""
-    print("🏛️ DIFC Legal RAG - Web Interface Launcher")
+    print("🤖 RAG Template - Web Interface Launcher")
     print("=" * 50)
     
     # Check requirements

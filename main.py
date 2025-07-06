@@ -19,7 +19,7 @@ from src.nvidia_embeddings import NVIDIAEmbeddings
 def print_banner():
     """Print application banner"""
     print("=" * 60)
-    print("🤖 NVIDIA RAG Agent - Interactive Q&A System")
+    print("🤖 RAG Agent - NVIDIA NemoRetriever Template")
     print("=" * 60)
     print("Ask questions about your PDF documents!")
     print("Type 'quit', 'exit', or 'q' to exit")
@@ -145,13 +145,13 @@ def main():
     if not rag_agent:
         print("❌ Failed to initialize RAG Agent. Exiting...")
         return
-    
+
     # Setup knowledge base
     print("\n🔨 Setting up knowledge base...")
     if not rag_agent.setup_knowledge_base():
         print("❌ Failed to setup knowledge base.")
         print("Please ensure you have PDF files in the documents folder and try again.")
-        
+
         # Ask if user wants to continue anyway
         response = input("\nWould you like to continue anyway? (y/n): ").lower().strip()
         if response not in ['y', 'yes']:
@@ -159,7 +159,7 @@ def main():
     else:
         print("✅ Knowledge base setup completed!")
         print_stats(rag_agent)
-    
+
     print("\n🚀 RAG Agent is ready! Ask me anything about your documents.")
     
     # Main interaction loop
@@ -174,7 +174,7 @@ def main():
             
             # Handle commands
             if question.lower() in ['quit', 'exit', 'q']:
-                print("\n👋 Thank you for using NVIDIA RAG Agent! Goodbye!")
+                print("\n👋 Thank you for using RAG Agent! Goodbye!")
                 break
             
             elif question.lower() == 'help':
