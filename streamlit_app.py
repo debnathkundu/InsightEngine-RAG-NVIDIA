@@ -203,7 +203,7 @@ def display_chat_interface(rag_agent):
         })
     
     # Display chat history
-    for message in st.session_state.messages:
+    for message_idx, message in enumerate(st.session_state.messages):
         if message["role"] == "user":
             st.markdown(f"""
             <div class="chat-message user-message">
@@ -221,7 +221,7 @@ def display_chat_interface(rag_agent):
             
             # Display sources if available
             if message.get("sources"):
-                display_sources(message["sources"], message.get("processing_time", 0))
+                display_sources(message["sources"], message.get("processing_time", 0), message_idx=message_idx)
     
     # Chat input
     if prompt := st.chat_input("Ask a question about your documents..."):
@@ -265,7 +265,7 @@ def display_chat_interface(rag_agent):
                 """, unsafe_allow_html=True)
 
                 # Display sources
-                display_sources(response.source_documents, response.processing_time)
+                display_sources(response.source_documents, response.processing_time, message_idx=len(st.session_state.messages)-1)
 
             except Exception as e:
                 st.error(f"❌ Error processing your question: {str(e)}")
@@ -280,7 +280,7 @@ def display_chat_interface(rag_agent):
             st.error("❌ RAG system not available. Please check the system status.")
             st.info("Try refreshing the page or contact support if the issue persists.")
 
-def display_sources(source_documents, processing_time, confidence_scores=None):
+def display_sources(source_documents, processing_time, confidence_scores=None, message_idx=0):
     """Display source documents in an elegant format"""
     if not source_documents:
         st.info("ℹ️ No specific sources found for this response.")
@@ -340,7 +340,8 @@ def display_sources(source_documents, processing_time, confidence_scores=None):
 
                     with col2:
                         # Quick actions
-                        if st.button(f"📋 Copy Text {i}", key=f"copy_{i}"):
+                        # if st.button(f"📋 Copy Text {i}", key=f"copy_{i}"):
+                        if st.button(f"📋 Copy Text {i}", key=f"copy_{message_idx}_{i}"):
                             st.code(doc.page_content, language="text")
 
                     st.markdown("**📝 Content Preview**:")
@@ -375,7 +376,7 @@ def display_sources(source_documents, processing_time, confidence_scores=None):
                     color_discrete_sequence=px.colors.qualitative.Set3
                 )
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, use_container_width=True, key=f"pie_chart_{message_idx}")
 
                 # Bar chart for page distribution
                 pages = [doc.metadata.get("page", 0) for doc in source_documents]
@@ -386,11 +387,11 @@ def display_sources(source_documents, processing_time, confidence_scores=None):
                         labels={'x': 'Page Number', 'y': 'Number of Sources'},
                         color_discrete_sequence=['#2a5298']
                     )
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, use_container_width=True, key=f"bar_chart_{message_idx}")
 
         with tab3:
             st.markdown("#### 🔍 Search Within Sources")
-            search_term = st.text_input("Search for specific terms in the source documents:")
+            search_term = st.text_input("Search for specific terms in the source documents:", key=f"search_{message_idx}")
 
             if search_term:
                 matches = []
