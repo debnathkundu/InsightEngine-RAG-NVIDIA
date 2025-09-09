@@ -79,7 +79,8 @@ class PDFDocumentLoader:
                 for doc in pdf_documents:
                     doc.metadata.update({
                         "source_file": pdf_file.name,
-                        "file_path": str(pdf_file)
+                        "file_path": str(pdf_file),
+                        "source": str(pdf_file)  # This is what the vector DB uses for deletion
                     })
                 
                 documents.extend(pdf_documents)
@@ -91,6 +92,51 @@ class PDFDocumentLoader:
         
         logger.info(f"Total documents loaded: {len(documents)}")
         return documents
+    
+    def load_pdf(self, pdf_file_path: str) -> List[Document]:
+        """
+        Load a single PDF file
+        
+        Args:
+            pdf_file_path: Path to the PDF file to load
+            
+        Returns:
+            List of Document objects from the PDF
+        """
+        pdf_path = Path(pdf_file_path)
+        
+        if not pdf_path.exists():
+            logger.error(f"PDF file does not exist: {pdf_file_path}")
+            return []
+        
+        if pdf_path.suffix.lower() != '.pdf':
+            logger.error(f"File is not a PDF: {pdf_file_path}")
+            return []
+        
+        try:
+            logger.info(f"Loading single PDF: {pdf_path.name}")
+            
+            # Load the PDF
+            loader = PyPDFLoader(str(pdf_path))
+            pdf_documents = loader.load()
+            
+            # Add metadata
+            for doc in pdf_documents:
+                doc.metadata.update({
+                    "source_file": pdf_path.name,
+                    "file_path": str(pdf_path),
+                    "source": str(pdf_path)  # This is what the vector DB uses for deletion
+                })
+            
+            # Split the documents
+            split_docs = self.split_documents(pdf_documents)
+            
+            logger.info(f"Loaded and split {pdf_path.name} into {len(split_docs)} chunks")
+            return split_docs
+            
+        except Exception as e:
+            logger.error(f"Error loading PDF {pdf_file_path}: {str(e)}")
+            return []
     
     def split_documents(self, documents: List[Document]) -> List[Document]:
         """

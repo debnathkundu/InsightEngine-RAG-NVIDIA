@@ -23,6 +23,5 @@ tqdm>=4.65.0
 streamlit>=1.28.0
 plotly>=5.15.0
 
-# Web interface
-streamlit>=1.28.0
-plotly>=5.15.0
+# File system monitoring
+watchdog>=2.3.0

@@ -5,6 +5,7 @@ Combines document retrieval with question answering using NVIDIA models
 
 import os
 import logging
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
@@ -106,6 +107,9 @@ class RAGAgent:
         self.embeddings = NVIDIAEmbeddings(api_key)
         self.vector_db = VectorDatabase(self.embeddings, vector_db_path)
         self.llm = SimpleNVIDIALLM(api_key)
+        
+        # File watcher (will be started after knowledge base setup)
+        self.file_watcher_observer = None
 
         # Custom prompt template
         self.prompt_template = """Use the following pieces of context to answer the question at the end.
@@ -160,6 +164,10 @@ Answer: """
                 return False
             
             logger.info("✅ Knowledge base setup completed successfully!")
+            
+            # Start file watcher for incremental updates
+            self.start_file_watcher()
+            
             return True
             
         except Exception as e:
@@ -306,6 +314,162 @@ Answer: """
         except Exception as e:
             logger.error(f"Failed to add documents: {str(e)}")
             return False
+
+    def add_document(self, file_path: str) -> bool:
+        """
+        Add a single document to the knowledge base
+        
+        Args:
+            file_path: Path to the PDF file to add
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from pathlib import Path
+            
+            # Check if file exists and is a PDF
+            path = Path(file_path)
+            if not path.exists() or path.suffix.lower() != '.pdf':
+                logger.error(f"File not found or not a PDF: {file_path}")
+                return False
+            
+            # Load the single document
+            loader = PDFDocumentLoader(str(path.parent))
+            documents = loader.load_pdf(str(path))
+            
+            if not documents:
+                logger.warning(f"No content extracted from: {file_path}")
+                return False
+            
+            # Add to vector database
+            if self.vector_db.add_documents(documents):
+                # Save updated index
+                self.vector_db.save_index()
+                logger.info(f"✅ Added document: {path.name}")
+                return True
+            else:
+                logger.error(f"Failed to add document: {file_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to add document {file_path}: {str(e)}")
+            return False
+
+    def update_document(self, file_path: str) -> bool:
+        """
+        Update a document in the knowledge base
+        
+        Args:
+            file_path: Path to the PDF file to update
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from pathlib import Path
+            
+            # Check if file exists and is a PDF
+            path = Path(file_path)
+            if not path.exists() or path.suffix.lower() != '.pdf':
+                logger.error(f"File not found or not a PDF: {file_path}")
+                return False
+            
+            # Load the updated document
+            loader = PDFDocumentLoader(str(path.parent))
+            documents = loader.load_pdf(str(path))
+            
+            if not documents:
+                logger.warning(f"No content extracted from: {file_path}")
+                return False
+            
+            # Update in vector database (this will delete old and add new)
+            if self.vector_db.update_document(str(path), documents):
+                # Save updated index
+                self.vector_db.save_index()
+                logger.info(f"✅ Updated document: {path.name}")
+                return True
+            else:
+                logger.error(f"Failed to update document: {file_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to update document {file_path}: {str(e)}")
+            return False
+
+    def remove_document(self, file_path: str) -> bool:
+        """
+        Remove a document from the knowledge base
+        
+        Args:
+            file_path: Path to the PDF file to remove
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from pathlib import Path
+            
+            path = Path(file_path)
+            
+            # Remove from vector database by source
+            if self.vector_db.delete_documents_by_source(str(path)):
+                # Save updated index
+                self.vector_db.save_index()
+                logger.info(f"✅ Removed document: {path.name}")
+                return True
+            else:
+                logger.warning(f"Document not found in knowledge base: {file_path}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to remove document {file_path}: {str(e)}")
+            return False
+
+    def start_file_watcher(self) -> bool:
+        """
+        Start the file watcher for incremental updates
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            from .file_watcher import start_file_watcher
+            
+            if self.file_watcher_observer is not None:
+                logger.warning("File watcher already running")
+                return True
+                
+            self.file_watcher_observer = start_file_watcher(self, self.docs_folder)
+            
+            if self.file_watcher_observer:
+                logger.info("🔄 Incremental updates enabled - file watcher started")
+                return True
+            else:
+                logger.warning("Failed to start file watcher")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to start file watcher: {str(e)}")
+            return False
+
+    def stop_file_watcher(self) -> None:
+        """Stop the file watcher"""
+        try:
+            if self.file_watcher_observer is not None:
+                self.file_watcher_observer.stop()
+                self.file_watcher_observer.join()
+                self.file_watcher_observer = None
+                logger.info("📴 File watcher stopped")
+        except Exception as e:
+            logger.error(f"Error stopping file watcher: {str(e)}")
+
+    def __del__(self):
+        """Cleanup when RAGAgent is destroyed"""
+        try:
+            self.stop_file_watcher()
+        except Exception:
+            pass
 
 
 def main():

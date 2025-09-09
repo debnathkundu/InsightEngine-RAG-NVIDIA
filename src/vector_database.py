@@ -173,6 +173,66 @@ class VectorDatabase:
         except Exception as e:
             logger.error(f"Failed to add documents: {str(e)}")
             return False
+
+    def delete_documents_by_source(self, source_file: str) -> bool:
+        """
+        Delete all document chunks associated with a specific source file.
+        
+        Args:
+            source_file: The source file path to delete.
+            
+        Returns:
+            True if documents were deleted, False otherwise.
+        """
+        if not self.vectorstore:
+            logger.warning("Cannot delete: No vector index loaded.")
+            return False
+
+        try:
+            # Find IDs of documents to delete
+            ids_to_delete = [
+                doc_id for doc_id, doc in self.vectorstore.docstore._dict.items()
+                if doc.metadata.get("source") == source_file
+            ]
+
+            if not ids_to_delete:
+                logger.info(f"No documents found with source: {source_file}")
+                return False
+
+            # Delete documents from the vector store
+            self.vectorstore.delete(ids_to_delete)
+            logger.info(f"Deleted {len(ids_to_delete)} chunks for source: {source_file}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to delete documents for source {source_file}: {str(e)}")
+            return False
+
+    def update_document(self, source_file: str, new_documents: List[Document]) -> bool:
+        """
+        Update a document in the index by deleting old chunks and adding new ones.
+        
+        Args:
+            source_file: The source file being updated.
+            new_documents: The list of new document chunks from the file.
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            # First, delete all existing chunks for this source
+            self.delete_documents_by_source(source_file)
+            
+            # Then, add the new chunks
+            if new_documents:
+                self.add_documents(new_documents)
+            
+            logger.info(f"Successfully updated document: {source_file}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to update document {source_file}: {str(e)}")
+            return False
     
     def similarity_search(
         self,
