@@ -9,6 +9,8 @@ from threading import Thread, Timer
 from collections import defaultdict
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
+import queue
+import threading
 
 # Forward reference to avoid circular imports
 from typing import TYPE_CHECKING
@@ -17,6 +19,20 @@ if TYPE_CHECKING:
     from src.rag_agent import RAGAgent
 
 logger = logging.getLogger(__name__)
+
+# Global notification queue for cross-thread communication
+notification_queue = queue.Queue()
+
+def get_pending_notifications():
+    """Get all pending notifications from the queue"""
+    notifications = []
+    try:
+        while True:
+            notification = notification_queue.get_nowait()
+            notifications.append(notification)
+    except queue.Empty:
+        pass
+    return notifications
 
 class BatchDocumentChangeHandler(FileSystemEventHandler):
     """
@@ -81,6 +97,16 @@ class BatchDocumentChangeHandler(FileSystemEventHandler):
         
         logger.debug(f"Scheduled {operation} operation for {path_obj.name}")
 
+    def _add_notification(self, notification_type: str, file_name: str, details: dict = None):
+        """Add a notification to the queue for the main app to display"""
+        notification = {
+            "type": notification_type,
+            "filename": file_name,
+            "details": details or {},
+            "timestamp": time.time()
+        }
+        notification_queue.put(notification)
+
     def _process_batch(self):
         """Process all pending operations in batch"""
         if not any(self.pending_operations.values()):
@@ -96,10 +122,13 @@ class BatchDocumentChangeHandler(FileSystemEventHandler):
             deleted_files = self.pending_operations.get('deleted', set())
             for file_path in deleted_files:
                 try:
-                    logger.info(f"🗑️ Removing document: {Path(file_path).name}")
+                    file_name = Path(file_path).name
+                    logger.info(f"🗑️ Removing document: {file_name}")
                     self.rag_agent.remove_document(file_path)
+                    self._add_notification("document_removed", file_name)
                 except Exception as e:
                     logger.error(f"Failed to remove {file_path}: {str(e)}")
+                    self._add_notification("error", Path(file_path).name, {"error": str(e)})
             
             # Then process additions and modifications
             modified_files = self.pending_operations.get('modified', set())
@@ -113,24 +142,37 @@ class BatchDocumentChangeHandler(FileSystemEventHandler):
                         if file_path in created_files:
                             logger.info(f"📄 Adding new document: {path_obj.name}")
                             self.rag_agent.add_document(file_path)
+                            self._add_notification("document_added", path_obj.name)
                         else:
                             logger.info(f"🔄 Updating document: {path_obj.name}")
                             self.rag_agent.update_document(file_path)
+                            self._add_notification("document_updated", path_obj.name)
                     else:
                         logger.warning(f"File no longer exists: {path_obj.name}")
                 except Exception as e:
                     logger.error(f"Failed to process {file_path}: {str(e)}")
+                    self._add_notification("error", Path(file_path).name, {"error": str(e)})
             
             # Save the updated index once after all operations
             if operations_count > 0:
                 try:
                     self.rag_agent.vector_db.save_index()
                     logger.info(f"✅ Batch processing completed successfully ({operations_count} operations)")
+                    
+                    # Add batch completion notification
+                    self._add_notification("vector_db_updated", "", {
+                        "operations": operations_count,
+                        "deleted": len(deleted_files),
+                        "added": len(created_files),
+                        "updated": len(modified_files)
+                    })
                 except Exception as e:
                     logger.error(f"Failed to save index after batch processing: {str(e)}")
+                    self._add_notification("error", "Index save failed", {"error": str(e)})
             
         except Exception as e:
             logger.error(f"Batch processing failed: {str(e)}")
+            self._add_notification("error", "Batch processing failed", {"error": str(e)})
         finally:
             # Clear pending operations
             self.pending_operations.clear()

@@ -17,7 +17,115 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from src.rag_agent import RAGAgent
+from src.file_watcher import start_file_watcher, get_pending_notifications
 from src.nvidia_embeddings import NVIDIAEmbeddings
+
+def add_system_notification(notification_type: str, filename: str = "", details: dict = None):
+    """Add a system notification to the session state"""
+    if "system_notifications" not in st.session_state:
+        st.session_state.system_notifications = []
+    
+    notification = {
+        "type": notification_type,
+        "filename": filename,
+        "details": details or {},
+        "timestamp": time.time()
+    }
+    
+    st.session_state.system_notifications.append(notification)
+
+def process_file_watcher_notifications():
+    """Process any pending notifications from the file watcher"""
+    try:
+        notifications = get_pending_notifications()
+        for notification in notifications:
+            # Convert file watcher notification to system notification
+            add_system_notification(
+                notification["type"],
+                notification["filename"],
+                notification["details"]
+            )
+    except Exception as e:
+        # Silently handle errors to avoid disrupting the main app
+        pass
+
+def display_system_message(notification_type: str, filename: str = "", details: dict = None):
+    """Display system messages (file operations, indexing updates, etc.)"""
+    if details is None:
+        details = {}
+    
+    # Create content based on notification type
+    if notification_type == "document_added":
+        icon = "📄➕"
+        bg_color = "#e8f5e8"
+        border_color = "#4caf50"
+        content = f"Document added: {filename}"
+    elif notification_type == "document_removed":
+        icon = "📄🗑️"
+        bg_color = "#fff3e0"
+        border_color = "#ff9800"
+        content = f"Document removed: {filename}"
+    elif notification_type == "document_updated":
+        icon = "📄🔄"
+        bg_color = "#e3f2fd"
+        border_color = "#2196f3"
+        content = f"Document updated: {filename}"
+    elif notification_type == "vector_db_updated":
+        icon = "�🔄"
+        bg_color = "#f3e5f5"
+        border_color = "#9c27b0"
+        ops = details.get("operations", 0)
+        content = f"Vector database updated ({ops} operations)"
+    elif notification_type == "vector_db_rebuilt":
+        icon = "🏗️🔄"
+        bg_color = "#fce4ec"
+        border_color = "#e91e63"
+        docs = details.get("documents", 0)
+        time_taken = details.get("time_taken", 0)
+        content = f"Vector database rebuilt ({docs} documents, {time_taken:.1f}s)"
+    elif notification_type == "index_optimized":
+        icon = "⚡🔧"
+        bg_color = "#f3e5f5"
+        border_color = "#9c27b0"
+        docs = details.get("documents", 0)
+        time_taken = details.get("time_taken", 0)
+        content = f"Index optimized ({docs} documents, {time_taken:.1f}s)"
+    elif notification_type == "system_init":
+        icon = "🚀"
+        bg_color = "#e8f5e8"
+        border_color = "#4caf50"
+        content = "RAG Assistant initialized successfully!"
+    elif notification_type == "error":
+        icon = "⚠️"
+        bg_color = "#ffebee"
+        border_color = "#f44336"
+        error_msg = details.get("error", "Unknown error")
+        content = f"Error: {error_msg}"
+        if filename:
+            content = f"Error with {filename}: {error_msg}"
+    else:
+        icon = "ℹ️"
+        bg_color = "#f5f5f5"
+        border_color = "#757575"
+        content = filename if filename else "System notification"
+    
+    time_str = datetime.now().strftime("%H:%M:%S")
+    
+    st.markdown(f"""
+    <div style="
+        background-color: {bg_color}; 
+        border-left: 4px solid {border_color}; 
+        padding: 0.8rem; 
+        margin: 0.5rem 0; 
+        border-radius: 8px;
+        font-size: 0.9rem;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span><strong>{icon} System:</strong> {content}</span>
+            <small style="color: #666;">{time_str}</small>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Page configuration
 st.set_page_config(
@@ -45,16 +153,27 @@ st.markdown("""
         margin: 1rem 0;
         border-left: 4px solid #2a5298;
         background-color: #f8f9fa;
+        position: relative;
     }
     
     .user-message {
         background-color: #e3f2fd;
         border-left-color: #1976d2;
+        margin-left: 2rem;
     }
     
     .assistant-message {
         background-color: #f3e5f5;
         border-left-color: #7b1fa2;
+        margin-right: 2rem;
+    }
+    
+    .system-message {
+        background-color: #fff8e1;
+        border-left-color: #ff9800;
+        font-size: 0.9rem;
+        margin: 0.5rem 0;
+        padding: 0.8rem;
     }
     
     .source-card {
@@ -87,6 +206,22 @@ st.markdown("""
     
     .status-offline {
         background-color: #f44336;
+    }
+    
+    /* Chat chronology improvements */
+    .chat-container {
+        max-height: 600px;
+        overflow-y: auto;
+        padding: 1rem;
+        border: 1px solid #e0e0e0;
+        border-radius: 10px;
+        background-color: #fafafa;
+    }
+    
+    .timestamp {
+        font-size: 0.8rem;
+        color: #666;
+        opacity: 0.8;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -191,13 +326,28 @@ def display_sidebar(rag_agent):
             if "error" in nvidia_status:
                 st.sidebar.error(f"Error: {nvidia_status['error'][:50]}...")
         
-        # Vector database status
+        # Vector database & Documents folder status
         vector_status = components.get("vector_database", {})
+        docs_status = components.get("documents_folder", {})
+        st.sidebar.markdown("### 📚 Knowledge Base Status")
+
+        # Display overall status messages
         if vector_status.get("status") == "online":
-            st.sidebar.success("🟢 Vector Database Loaded")
-            st.sidebar.metric("Documents", vector_status.get("document_count", 0))
+            st.sidebar.success("🟢 Vector Database Online")
         else:
             st.sidebar.error("🔴 Vector Database Offline")
+
+        if docs_status.get("status") == "accessible":
+            st.sidebar.success("🟢 Documents Folder Accessible")
+        else:
+            st.sidebar.error("🔴 Documents Folder Issue")
+
+        # Show metrics side by side
+        kb_col1, kb_col2 = st.sidebar.columns(2)
+        with kb_col1:
+            st.metric("Documents", vector_status.get("document_count", 0))
+        with kb_col2:
+            st.metric("PDF Files", docs_status.get("pdf_files", 0))
         
         # File watcher status
         watcher_status = components.get("file_watcher", {})
@@ -206,14 +356,6 @@ def display_sidebar(rag_agent):
             st.sidebar.info("🔄 Auto-updates enabled")
         else:
             st.sidebar.warning("🟡 File Watcher Inactive")
-        
-        # Documents folder status
-        docs_status = components.get("documents_folder", {})
-        if docs_status.get("status") == "accessible":
-            st.sidebar.success("🟢 Documents Folder Accessible")
-            st.sidebar.metric("PDF Files", docs_status.get("pdf_files", 0))
-        else:
-            st.sidebar.error("🔴 Documents Folder Issue")
         
         # Model information
         st.sidebar.markdown("### 🤖 AI Models")
@@ -226,13 +368,29 @@ def display_sidebar(rag_agent):
         with col1:
             if st.button("🔄 Optimize", help="Optimize knowledge base performance"):
                 with st.spinner("Optimizing..."):
+                    start_time = time.time()
                     if rag_agent.optimize_knowledge_base():
+                        end_time = time.time()
+                        stats = rag_agent.get_knowledge_base_stats()
+                        
+                        # Add system notification
+                        add_system_notification("index_optimized", "", {
+                            "documents": stats.get('document_count', 0),
+                            "time_taken": end_time - start_time
+                        })
+                        
                         st.success("✅ Optimization completed!")
                     else:
+                        add_system_notification("error", "Knowledge base optimization failed")
                         st.error("❌ Optimization failed")
         
         with col2:
             if st.button("🔍 Health Check", help="Run comprehensive health check"):
+                health = rag_agent.get_system_health()
+                overall_status = health.get("overall_status", "unknown")
+                
+                # Add system notification
+                add_system_notification("system", f"Health check completed - Status: {overall_status.title()}")
                 st.json(health)
         
         # Document types supported
@@ -256,96 +414,137 @@ def display_sidebar(rag_agent):
         st.sidebar.error("RAG system not available")
 
 def display_chat_interface(rag_agent):
-    """Display the main chat interface"""
-    st.markdown("## 💬 Ask Your Question")
+    """Display the main chat interface with chronological order"""
+    st.markdown("## 💬 Chat Assistant")
 
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
+        # Add initial system message
+        st.session_state.messages.append({
+            "role": "system",
+            "content": "🤖 RAG Assistant initialized successfully!",
+            "timestamp": datetime.now(),
+            "type": "system_init"
+        })
         st.session_state.messages.append({
             "role": "assistant",
             "content": "Hello! I'm your RAG Assistant powered by NVIDIA NemoRetriever. I can help you find information from your document collection. What would you like to know?",
             "sources": [],
-            "processing_time": 0
+            "processing_time": 0,
+            "timestamp": datetime.now(),
+            "type": "chat"
         })
+
+    # Create a container for the chat that can be updated
+    chat_container = st.container()
     
-    # Display chat history
-    for message_idx, message in enumerate(st.session_state.messages):
-        if message["role"] == "user":
-            st.markdown(f"""
-            <div class="chat-message user-message">
-                <strong>👤 You:</strong><br>
-                {message["content"]}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="chat-message assistant-message">
-                <strong>🤖 AI Assistant:</strong><br>
-                {message["content"]}
-            </div>
-            """, unsafe_allow_html=True)
+    with chat_container:
+        # Display messages in chronological order (oldest first)
+        for message_idx, message in enumerate(st.session_state.messages):
+            timestamp = message.get("timestamp", datetime.now())
+            time_str = timestamp.strftime("%H:%M:%S")
             
-            # Display sources if available
-            if message.get("sources"):
-                display_sources(message["sources"], message.get("processing_time", 0), message_idx=message_idx)
-    
-    # Chat input
+            if message["role"] == "system":
+                # System notifications (file operations, indexing, etc.)
+                display_system_message(
+                    message.get("type", "system"),
+                    message.get("filename", ""),
+                    message.get("details", {})
+                )
+            elif message["role"] == "user":
+                # User messages
+                st.markdown(f"""
+                <div class="chat-message user-message">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>👤 You</strong>
+                        <small style="color: #666;">{time_str}</small>
+                    </div>
+                    {message["content"]}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Assistant messages
+                st.markdown(f"""
+                <div class="chat-message assistant-message">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong>🤖 AI Assistant</strong>
+                        <small style="color: #666;">{time_str}</small>
+                    </div>
+                    {message["content"]}
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Display sources if available
+                if message.get("sources"):
+                    display_sources(message["sources"], message.get("processing_time", 0), message_idx=message_idx)
+
+    # Chat input at the bottom
+    st.markdown("---")
     if prompt := st.chat_input("Ask a question about your documents..."):
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        
-        # Display user message immediately
-        st.markdown(f"""
-        <div class="chat-message user-message">
-            <strong>👤 You:</strong><br>
-            {prompt}
-        </div>
-        """, unsafe_allow_html=True)
+        # Add user message with timestamp
+        user_message = {
+            "role": "user", 
+            "content": prompt,
+            "timestamp": datetime.now(),
+            "type": "chat"
+        }
+        st.session_state.messages.append(user_message)
         
         if rag_agent:
             try:
-                # Show loading spinner
+                # Get response from RAG agent
                 with st.spinner("🔍 Searching documents..."):
-                    # Get response from RAG agent
                     response = rag_agent.ask_question(prompt)
 
                 # Validate response
                 if not response or not response.answer:
-                    st.error("❌ Failed to get a response. Please try again.")
-                    return
+                    error_message = {
+                        "role": "assistant",
+                        "content": "❌ I apologize, but I couldn't generate a response. Please try rephrasing your question.",
+                        "sources": [],
+                        "processing_time": 0,
+                        "timestamp": datetime.now(),
+                        "type": "error"
+                    }
+                    st.session_state.messages.append(error_message)
+                else:
+                    # Add assistant response with timestamp
+                    assistant_message = {
+                        "role": "assistant",
+                        "content": response.answer,
+                        "sources": response.source_documents,
+                        "processing_time": response.processing_time,
+                        "timestamp": datetime.now(),
+                        "type": "chat"
+                    }
+                    st.session_state.messages.append(assistant_message)
 
-                # Add assistant response
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": response.answer,
-                    "sources": response.source_documents,
-                    "processing_time": response.processing_time
-                })
-
-                # Display assistant response
-                st.markdown(f"""
-                <div class="chat-message assistant-message">
-                    <strong>🤖 AI Assistant:</strong><br>
-                    {response.answer}
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Display sources
-                display_sources(response.source_documents, response.processing_time, message_idx=len(st.session_state.messages)-1)
+                # Force refresh to show new messages
+                st.rerun()
 
             except Exception as e:
-                st.error(f"❌ Error processing your question: {str(e)}")
-                st.session_state.messages.append({
+                error_message = {
                     "role": "assistant",
-                    "content": f"I apologize, but I encountered an error while processing your question: {str(e)}",
+                    "content": f"❌ I encountered an error while processing your question: {str(e)}",
                     "sources": [],
-                    "processing_time": 0
-                })
+                    "processing_time": 0,
+                    "timestamp": datetime.now(),
+                    "type": "error"
+                }
+                st.session_state.messages.append(error_message)
+                st.rerun()
 
         else:
-            st.error("❌ RAG system not available. Please check the system status.")
-            st.info("Try refreshing the page or contact support if the issue persists.")
+            # System unavailable message
+            system_message = {
+                "role": "system",
+                "content": "❌ RAG system not available. Please check the system status.",
+                "timestamp": datetime.now(),
+                "type": "error"
+            }
+            st.session_state.messages.append(system_message)
+            st.rerun()
 
 def display_sources(source_documents, processing_time, confidence_scores=None, message_idx=0):
     """Display source documents in an elegant format"""
@@ -593,12 +792,24 @@ def display_document_stats(rag_agent):
             if st.checkbox("⚠️ Confirm rebuild (this may take time)", key="confirm_rebuild"):
                 with st.spinner("🏗️ Rebuilding knowledge base..."):
                     try:
+                        start_time = time.time()
                         if rag_agent.setup_knowledge_base(force_rebuild=True):
+                            end_time = time.time()
+                            stats = rag_agent.get_knowledge_base_stats()
+                            
+                            # Add system notification
+                            add_system_notification("vector_db_rebuilt", "", {
+                                "documents": stats.get('document_count', 0),
+                                "time_taken": end_time - start_time
+                            })
+                            
                             st.success("✅ Knowledge base rebuilt successfully!")
                             st.balloons()
                         else:
+                            add_system_notification("error", "Knowledge base rebuild failed")
                             st.error("❌ Rebuild failed. Check system logs.")
                     except Exception as e:
+                        add_system_notification("error", f"Rebuild error: {str(e)}")
                         st.error(f"❌ Rebuild error: {str(e)}")
 
     # Document types breakdown with enhanced visualization
@@ -629,6 +840,9 @@ def display_document_stats(rag_agent):
 
 def main():
     """Main application function"""
+    # Process any pending file watcher notifications
+    process_file_watcher_notifications()
+    
     # Display header
     display_header()
 
@@ -696,6 +910,7 @@ def main():
 
         # Knowledge base rebuild
         if st.button("🔄 Rebuild Knowledge Base"):
+            add_system_notification("system", "Clearing cache and rebuilding knowledge base")
             st.cache_resource.clear()
             st.rerun()
 
