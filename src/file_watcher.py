@@ -5,7 +5,8 @@ Monitors the document directory for changes and updates the knowledge base.
 import time
 import logging
 from pathlib import Path
-from threading import Thread
+from threading import Thread, Timer
+from collections import defaultdict
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
@@ -17,18 +18,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-class DocumentChangeHandler(FileSystemEventHandler):
-    """Handles file system events for the document folder."""
+class BatchDocumentChangeHandler(FileSystemEventHandler):
+    """
+    Enhanced file handler that batches operations to avoid excessive processing.
+    """
 
-    def __init__(self, rag_agent: "RAGAgent"):
+    def __init__(self, rag_agent: "RAGAgent", batch_delay: float = 5.0):
         """
         Initializes the handler with a RAGAgent instance.
         
         Args:
             rag_agent: The RAG agent that will process document changes.
+            batch_delay: Time to wait before processing batched operations (seconds).
         """
         self.rag_agent = rag_agent
-        # A set to track recently handled files to avoid duplicate processing
+        self.batch_delay = batch_delay
+        self.pending_operations = defaultdict(set)  # Use set to avoid duplicates
+        self.timer = None
+        
+        # Track recently processed files to avoid duplicate processing
         self.debounce_set = set()
 
     def _is_valid_file(self, event: FileSystemEvent) -> bool:
@@ -40,7 +48,7 @@ class DocumentChangeHandler(FileSystemEventHandler):
         if file_path.suffix.lower() != ".pdf":
             return False
             
-        # Debounce check
+        # Debounce check - avoid processing the same file too quickly
         if file_path in self.debounce_set:
             return False
             
@@ -51,30 +59,95 @@ class DocumentChangeHandler(FileSystemEventHandler):
         self.debounce_set.add(file_path)
         
         def remove_from_set():
-            time.sleep(2) # Debounce for 2 seconds
+            time.sleep(2)  # Debounce for 2 seconds
             self.debounce_set.discard(file_path)
             
-        Thread(target=remove_from_set).start()
+        Thread(target=remove_from_set, daemon=True).start()
+
+    def _schedule_operation(self, operation: str, file_path: str):
+        """Schedule operation with batching"""
+        path_obj = Path(file_path)
+        
+        # Add to pending operations
+        self.pending_operations[operation].add(file_path)
+        self._add_to_debounce(path_obj)
+        
+        # Reset timer
+        if self.timer:
+            self.timer.cancel()
+        
+        self.timer = Timer(self.batch_delay, self._process_batch)
+        self.timer.start()
+        
+        logger.debug(f"Scheduled {operation} operation for {path_obj.name}")
+
+    def _process_batch(self):
+        """Process all pending operations in batch"""
+        if not any(self.pending_operations.values()):
+            return
+        
+        logger.info("🔄 Processing batch of file operations...")
+        
+        try:
+            operations_count = sum(len(ops) for ops in self.pending_operations.values())
+            logger.info(f"Processing {operations_count} file operations")
+            
+            # Process deletions first (order matters)
+            deleted_files = self.pending_operations.get('deleted', set())
+            for file_path in deleted_files:
+                try:
+                    logger.info(f"🗑️ Removing document: {Path(file_path).name}")
+                    self.rag_agent.remove_document(file_path)
+                except Exception as e:
+                    logger.error(f"Failed to remove {file_path}: {str(e)}")
+            
+            # Then process additions and modifications
+            modified_files = self.pending_operations.get('modified', set())
+            created_files = self.pending_operations.get('created', set())
+            all_changes = modified_files.union(created_files)
+            
+            for file_path in all_changes:
+                try:
+                    path_obj = Path(file_path)
+                    if path_obj.exists():  # File might have been deleted after scheduling
+                        if file_path in created_files:
+                            logger.info(f"📄 Adding new document: {path_obj.name}")
+                            self.rag_agent.add_document(file_path)
+                        else:
+                            logger.info(f"🔄 Updating document: {path_obj.name}")
+                            self.rag_agent.update_document(file_path)
+                    else:
+                        logger.warning(f"File no longer exists: {path_obj.name}")
+                except Exception as e:
+                    logger.error(f"Failed to process {file_path}: {str(e)}")
+            
+            # Save the updated index once after all operations
+            if operations_count > 0:
+                try:
+                    self.rag_agent.vector_db.save_index()
+                    logger.info(f"✅ Batch processing completed successfully ({operations_count} operations)")
+                except Exception as e:
+                    logger.error(f"Failed to save index after batch processing: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"Batch processing failed: {str(e)}")
+        finally:
+            # Clear pending operations
+            self.pending_operations.clear()
 
     def on_created(self, event: FileSystemEvent):
         """Called when a file is created."""
         if not self._is_valid_file(event):
             return
         
-        file_path = Path(event.src_path)
-        logger.info(f"📄 New document detected: {file_path.name}. Adding to knowledge base.")
-        self._add_to_debounce(file_path)
-        self.rag_agent.add_document(str(file_path))
+        self._schedule_operation('created', event.src_path)
 
     def on_modified(self, event: FileSystemEvent):
         """Called when a file is modified."""
         if not self._is_valid_file(event):
             return
             
-        file_path = Path(event.src_path)
-        logger.info(f"🔄 Document modified: {file_path.name}. Updating knowledge base.")
-        self._add_to_debounce(file_path)
-        self.rag_agent.update_document(str(file_path))
+        self._schedule_operation('modified', event.src_path)
 
     def on_deleted(self, event: FileSystemEvent):
         """Called when a file is deleted."""
@@ -87,9 +160,7 @@ class DocumentChangeHandler(FileSystemEventHandler):
         if file_path.suffix.lower() != ".pdf":
             return
             
-        # Skip debounce check for deletions since file is already gone
-        logger.info(f"🗑️ Document deleted: {file_path.name}. Removing from knowledge base.")
-        self.rag_agent.remove_document(str(file_path))
+        self._schedule_operation('deleted', event.src_path)
 
 
 def start_file_watcher(rag_agent: "RAGAgent", watch_path: str):
@@ -105,12 +176,21 @@ def start_file_watcher(rag_agent: "RAGAgent", watch_path: str):
         logger.error(f"Watch path '{watch_path}' is not a valid directory. File watcher not started.")
         return
 
-    event_handler = DocumentChangeHandler(rag_agent)
+    event_handler = BatchDocumentChangeHandler(rag_agent)
     observer = Observer()
     observer.schedule(event_handler, str(path), recursive=False)
     
     # Start the observer
     observer.start()
     
-    logger.info(f"👀 File watcher started on directory: '{watch_path}'")
+    logger.info(f"👀 Enhanced file watcher started on directory: '{watch_path}'")
+    logger.info(f"🔄 Batch processing enabled with 5-second delay for optimal performance")
     return observer
+
+
+# Legacy handler for backward compatibility
+class DocumentChangeHandler(BatchDocumentChangeHandler):
+    """Legacy handler - now just an alias for BatchDocumentChangeHandler"""
+    
+    def __init__(self, rag_agent: "RAGAgent"):
+        super().__init__(rag_agent, batch_delay=5.0)

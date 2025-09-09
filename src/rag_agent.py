@@ -4,6 +4,7 @@ Combines document retrieval with question answering using NVIDIA models
 """
 
 import os
+import time
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
@@ -344,9 +345,7 @@ Answer: """
             
             # Add to vector database
             if self.vector_db.add_documents(documents):
-                # Save updated index
-                self.vector_db.save_index()
-                logger.info(f"✅ Added document: {path.name}")
+                logger.info(f"✅ Added document: {path.name} ({len(documents)} chunks)")
                 return True
             else:
                 logger.error(f"Failed to add document: {file_path}")
@@ -385,9 +384,7 @@ Answer: """
             
             # Update in vector database (this will delete old and add new)
             if self.vector_db.update_document(str(path), documents):
-                # Save updated index
-                self.vector_db.save_index()
-                logger.info(f"✅ Updated document: {path.name}")
+                logger.info(f"✅ Updated document: {path.name} ({len(documents)} chunks)")
                 return True
             else:
                 logger.error(f"Failed to update document: {file_path}")
@@ -414,8 +411,6 @@ Answer: """
             
             # Remove from vector database by source
             if self.vector_db.delete_documents_by_source(str(path)):
-                # Save updated index
-                self.vector_db.save_index()
                 logger.info(f"✅ Removed document: {path.name}")
                 return True
             else:
@@ -463,6 +458,97 @@ Answer: """
                 logger.info("📴 File watcher stopped")
         except Exception as e:
             logger.error(f"Error stopping file watcher: {str(e)}")
+
+    def optimize_knowledge_base(self) -> bool:
+        """
+        Optimize the knowledge base for better performance
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info("🔧 Optimizing knowledge base...")
+            
+            # Check if optimization is needed
+            if self.vector_db.should_rebuild_index():
+                logger.info("Full index rebuild recommended")
+                return self.setup_knowledge_base(force_rebuild=True)
+            else:
+                # Perform lightweight optimization
+                return self.vector_db.optimize_index()
+                
+        except Exception as e:
+            logger.error(f"Knowledge base optimization failed: {str(e)}")
+            return False
+
+    def get_system_health(self) -> Dict[str, Any]:
+        """
+        Get comprehensive system health information
+        
+        Returns:
+            Dictionary with system health metrics
+        """
+        health = {
+            "timestamp": time.time(),
+            "overall_status": "healthy",
+            "components": {}
+        }
+        
+        try:
+            # Check NVIDIA API
+            try:
+                test_embedding = self.embeddings.embed_query("test")
+                health["components"]["nvidia_api"] = {
+                    "status": "online",
+                    "embedding_dimension": len(test_embedding)
+                }
+            except Exception as e:
+                health["components"]["nvidia_api"] = {
+                    "status": "offline",
+                    "error": str(e)
+                }
+                health["overall_status"] = "degraded"
+            
+            # Check vector database
+            vector_stats = self.vector_db.get_stats()
+            health["components"]["vector_database"] = {
+                "status": "online" if vector_stats.get("status") == "Index loaded" else "offline",
+                "document_count": vector_stats.get("document_count", 0),
+                "index_exists": vector_stats.get("index_exists", False)
+            }
+            
+            if not vector_stats.get("index_exists", False):
+                health["overall_status"] = "degraded"
+            
+            # Check file watcher
+            health["components"]["file_watcher"] = {
+                "status": "active" if self.file_watcher_observer else "inactive"
+            }
+            
+            # Check documents folder
+            try:
+                docs_path = Path(self.docs_folder)
+                pdf_count = len(list(docs_path.glob("*.pdf"))) if docs_path.exists() else 0
+                health["components"]["documents_folder"] = {
+                    "status": "accessible" if docs_path.exists() else "not_found",
+                    "pdf_files": pdf_count,
+                    "path": str(docs_path)
+                }
+            except Exception as e:
+                health["components"]["documents_folder"] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+            
+            return health
+            
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+            return {
+                "timestamp": time.time(),
+                "overall_status": "error",
+                "error": str(e)
+            }
 
     def __del__(self):
         """Cleanup when RAGAgent is destroyed"""

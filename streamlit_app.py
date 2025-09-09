@@ -148,32 +148,99 @@ def display_sidebar(rag_agent):
     st.sidebar.markdown("## 📊 System Status")
     
     if rag_agent:
-        # System status
-        st.sidebar.markdown("""
-        <div style="display: flex; align-items: center;">
-            <span class="status-indicator status-online"></span>
-            <strong>System Online</strong>
-        </div>
-        """, unsafe_allow_html=True)
+        # Get system health
+        health = rag_agent.get_system_health()
+        overall_status = health.get("overall_status", "unknown")
         
-        # Get knowledge base stats
-        stats = rag_agent.get_knowledge_base_stats()
+        # System status with color coding
+        if overall_status == "healthy":
+            st.sidebar.markdown("""
+            <div style="display: flex; align-items: center;">
+                <span class="status-indicator status-online"></span>
+                <strong>System Healthy</strong>
+            </div>
+            """, unsafe_allow_html=True)
+        elif overall_status == "degraded":
+            st.sidebar.markdown("""
+            <div style="display: flex; align-items: center;">
+                <span class="status-indicator" style="background-color: #ff9800;"></span>
+                <strong>System Degraded</strong>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.sidebar.markdown("""
+            <div style="display: flex; align-items: center;">
+                <span class="status-indicator status-offline"></span>
+                <strong>System Error</strong>
+            </div>
+            """, unsafe_allow_html=True)
         
-        st.sidebar.markdown("### 📚 Knowledge Base")
-        st.sidebar.metric("Documents", stats.get('document_count', 0))
-        st.sidebar.metric("PDF Files", stats.get('pdf_files_available', 0))
+        # Component health details
+        components = health.get("components", {})
+        
+        st.sidebar.markdown("### 🔧 Component Health")
+        
+        # NVIDIA API status
+        nvidia_status = components.get("nvidia_api", {})
+        if nvidia_status.get("status") == "online":
+            st.sidebar.success("🟢 NVIDIA API Connected")
+            if "embedding_dimension" in nvidia_status:
+                st.sidebar.info(f"📊 Embedding Dimension: {nvidia_status['embedding_dimension']}")
+        else:
+            st.sidebar.error("🔴 NVIDIA API Offline")
+            if "error" in nvidia_status:
+                st.sidebar.error(f"Error: {nvidia_status['error'][:50]}...")
+        
+        # Vector database status
+        vector_status = components.get("vector_database", {})
+        if vector_status.get("status") == "online":
+            st.sidebar.success("🟢 Vector Database Loaded")
+            st.sidebar.metric("Documents", vector_status.get("document_count", 0))
+        else:
+            st.sidebar.error("🔴 Vector Database Offline")
+        
+        # File watcher status
+        watcher_status = components.get("file_watcher", {})
+        if watcher_status.get("status") == "active":
+            st.sidebar.success("🟢 File Watcher Active")
+            st.sidebar.info("🔄 Auto-updates enabled")
+        else:
+            st.sidebar.warning("🟡 File Watcher Inactive")
+        
+        # Documents folder status
+        docs_status = components.get("documents_folder", {})
+        if docs_status.get("status") == "accessible":
+            st.sidebar.success("🟢 Documents Folder Accessible")
+            st.sidebar.metric("PDF Files", docs_status.get("pdf_files", 0))
+        else:
+            st.sidebar.error("🔴 Documents Folder Issue")
         
         # Model information
         st.sidebar.markdown("### 🤖 AI Models")
         st.sidebar.info("**Embedding**: nvidia/nv-embed-v1\n**LLM**: meta/llama-3.1-8b-instruct")
         
+        # System actions
+        st.sidebar.markdown("### ⚙️ System Actions")
+        
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("🔄 Optimize", help="Optimize knowledge base performance"):
+                with st.spinner("Optimizing..."):
+                    if rag_agent.optimize_knowledge_base():
+                        st.success("✅ Optimization completed!")
+                    else:
+                        st.error("❌ Optimization failed")
+        
+        with col2:
+            if st.button("🔍 Health Check", help="Run comprehensive health check"):
+                st.json(health)
+        
         # Document types supported
-        st.sidebar.markdown("### 📖 Document Types Supported")
+        st.sidebar.markdown("### 📖 Supported Documents")
         doc_types = [
-            "PDF Documents", "Research Papers", "Legal Documents",
-            "Technical Manuals", "Corporate Policies", "Academic Papers",
-            "Training Materials", "Compliance Documents", "Reports",
-            "Contracts", "Specifications", "User Guides"
+            "📚 Research Papers", "🔧 Technical Docs", "⚖️ Legal Documents",
+            "🏢 Corporate Policies", "🎓 Training Materials", "📖 User Manuals",
+            "✅ Compliance Docs", "📊 Reports", "📝 Contracts"
         ]
 
         for doc_type in doc_types:
@@ -427,8 +494,10 @@ def display_document_stats(rag_agent):
         st.error("RAG system not available")
         return
 
-    st.markdown("## 📊 Document Statistics")
+    st.markdown("## 📊 Document Statistics & System Health")
 
+    # Get comprehensive system health
+    health = rag_agent.get_system_health()
     stats = rag_agent.get_knowledge_base_stats()
 
     # Overview metrics
@@ -440,48 +509,123 @@ def display_document_stats(rag_agent):
     with col3:
         st.metric("🔍 Searchable Chunks", stats.get('document_count', 0))
     with col4:
-        st.metric("💾 Index Size", "Ready" if stats.get('index_exists') else "Not Found")
+        overall_status = health.get('overall_status', 'unknown')
+        status_emoji = {"healthy": "🟢", "degraded": "🟡", "error": "🔴"}.get(overall_status, "❓")
+        st.metric("🏥 System Health", f"{status_emoji} {overall_status.title()}")
 
-    # Document types breakdown
-    st.markdown("### 📖 Document Types & Use Cases")
-    doc_categories = {
-        "Research Papers": "📚",
-        "Technical Documentation": "🔧",
-        "Legal Documents": "⚖️",
-        "Corporate Policies": "🏢",
-        "Training Materials": "🎓",
-        "User Manuals": "📖",
-        "Compliance Documents": "✅",
-        "Reports & Analysis": "📊",
-        "Contracts & Agreements": "📝",
-        "Specifications": "🔍",
-        "Academic Papers": "🎓",
-        "Reference Materials": "📚"
-    }
-
-    cols = st.columns(3)
-    for i, (category, emoji) in enumerate(doc_categories.items()):
-        with cols[i % 3]:
-            st.markdown(f"{emoji} **{category}**")
-
-    # System health
-    st.markdown("### 🔧 System Health")
+    # System health details
+    st.markdown("### � System Health Dashboard")
+    
     health_col1, health_col2 = st.columns(2)
-
+    
     with health_col1:
-        st.markdown("**API Status**")
-        if rag_agent:
-            st.success("🟢 NVIDIA API Connected")
-            st.success("🟢 Vector Database Loaded")
-            st.success("🟢 LLM Model Ready")
-        else:
-            st.error("🔴 System Offline")
+        st.markdown("**Component Status**")
+        components = health.get("components", {})
+        
+        for component_name, component_data in components.items():
+            status = component_data.get("status", "unknown")
+            display_name = component_name.replace("_", " ").title()
+            
+            if status in ["online", "active", "accessible", "healthy"]:
+                st.success(f"� {display_name}: {status.title()}")
+            elif status in ["degraded", "inactive"]:
+                st.warning(f"🟡 {display_name}: {status.title()}")
+            else:
+                st.error(f"🔴 {display_name}: {status.title()}")
+                if "error" in component_data:
+                    st.error(f"   Error: {component_data['error'][:100]}...")
 
     with health_col2:
         st.markdown("**Performance Metrics**")
-        st.info("📊 Embedding Dimension: 4096")
+        
+        # NVIDIA API metrics
+        nvidia_component = components.get("nvidia_api", {})
+        if "embedding_dimension" in nvidia_component:
+            st.info(f"📊 Embedding Dimension: {nvidia_component['embedding_dimension']}")
+        
+        # Vector DB metrics
+        vector_component = components.get("vector_database", {})
+        if "document_count" in vector_component:
+            st.info(f"💾 Indexed Documents: {vector_component['document_count']}")
+        
+        # File system metrics
+        docs_component = components.get("documents_folder", {})
+        if "pdf_files" in docs_component:
+            st.info(f"📁 Available PDFs: {docs_component['pdf_files']}")
+        
         st.info("🚀 Average Query Time: 2-8 seconds")
-        st.info("💾 Storage: Local FAISS Index")
+
+    # Enhanced system actions
+    st.markdown("### ⚙️ System Management")
+    
+    action_col1, action_col2, action_col3 = st.columns(3)
+    
+    with action_col1:
+        if st.button("🔄 Optimize Knowledge Base", help="Optimize vector database for better performance"):
+            with st.spinner("🔧 Optimizing knowledge base..."):
+                try:
+                    if rag_agent.optimize_knowledge_base():
+                        st.success("✅ Knowledge base optimized successfully!")
+                        st.balloons()
+                    else:
+                        st.error("❌ Optimization failed. Check system logs.")
+                except Exception as e:
+                    st.error(f"❌ Optimization error: {str(e)}")
+    
+    with action_col2:
+        if st.button("🔍 Run Health Check", help="Perform comprehensive system diagnostics"):
+            with st.spinner("🩺 Running health diagnostics..."):
+                fresh_health = rag_agent.get_system_health()
+                overall = fresh_health.get("overall_status", "unknown")
+                
+                if overall == "healthy":
+                    st.success("✅ All systems healthy!")
+                elif overall == "degraded":
+                    st.warning("⚠️ Some components need attention")
+                else:
+                    st.error("❌ System issues detected")
+                
+                with st.expander("📋 Detailed Health Report"):
+                    st.json(fresh_health)
+    
+    with action_col3:
+        if st.button("🔧 Rebuild Index", help="Force rebuild of the entire vector index"):
+            if st.checkbox("⚠️ Confirm rebuild (this may take time)", key="confirm_rebuild"):
+                with st.spinner("🏗️ Rebuilding knowledge base..."):
+                    try:
+                        if rag_agent.setup_knowledge_base(force_rebuild=True):
+                            st.success("✅ Knowledge base rebuilt successfully!")
+                            st.balloons()
+                        else:
+                            st.error("❌ Rebuild failed. Check system logs.")
+                    except Exception as e:
+                        st.error(f"❌ Rebuild error: {str(e)}")
+
+    # Document types breakdown with enhanced visualization
+    st.markdown("### 📖 Supported Document Types & Use Cases")
+    
+    doc_categories = {
+        "Research & Academic": ["📚 Research Papers", "🎓 Academic Papers", "📊 Reports & Analysis"],
+        "Technical & Engineering": ["🔧 Technical Documentation", "📖 User Manuals", "🔍 Specifications"],
+        "Legal & Compliance": ["⚖️ Legal Documents", "📝 Contracts & Agreements", "✅ Compliance Documents"],
+        "Corporate & Business": ["🏢 Corporate Policies", "🎓 Training Materials", "� Business Reports"]
+    }
+
+    for category, doc_types in doc_categories.items():
+        with st.expander(f"📂 {category}"):
+            for doc_type in doc_types:
+                st.markdown(f"• {doc_type}")
+
+    # Real-time file monitoring status
+    if health.get("components", {}).get("file_watcher", {}).get("status") == "active":
+        st.markdown("### 👀 Real-time File Monitoring")
+        st.success("🔄 **Auto-updates enabled** - The system will automatically detect and process new PDF files added to your documents folder")
+        st.info("� **Monitored folder**: " + str(docs_component.get("path", "Unknown")))
+        st.info("⚡ **Processing mode**: Batch processing with 5-second delay for optimal performance")
+    else:
+        st.markdown("### 👀 File Monitoring")
+        st.warning("🔄 Auto-updates currently disabled")
+        st.info("� Restart the system to enable automatic file monitoring")
 
 def main():
     """Main application function"""

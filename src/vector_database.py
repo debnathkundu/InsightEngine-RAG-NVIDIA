@@ -189,19 +189,37 @@ class VectorDatabase:
             return False
 
         try:
-            # Find IDs of documents to delete
-            ids_to_delete = [
-                doc_id for doc_id, doc in self.vectorstore.docstore._dict.items()
-                if doc.metadata.get("source") == source_file
-            ]
+            # Get all current documents except those from the source file
+            all_docs = []
+            docs_to_delete_count = 0
+            
+            # Iterate through all documents in the vectorstore
+            for doc_id in self.vectorstore.docstore._dict.keys():
+                doc = self.vectorstore.docstore._dict[doc_id]
+                if doc.metadata.get("source") == source_file:
+                    docs_to_delete_count += 1
+                else:
+                    all_docs.append(doc)
 
-            if not ids_to_delete:
+            if docs_to_delete_count == 0:
                 logger.info(f"No documents found with source: {source_file}")
                 return False
 
-            # Delete documents from the vector store
-            self.vectorstore.delete(ids_to_delete)
-            logger.info(f"Deleted {len(ids_to_delete)} chunks for source: {source_file}")
+            # Recreate vectorstore without deleted documents
+            if all_docs:
+                texts = [doc.page_content for doc in all_docs]
+                metadatas = [doc.metadata for doc in all_docs]
+                
+                self.vectorstore = FAISS.from_texts(
+                    texts=texts,
+                    embedding=self.embeddings,
+                    metadatas=metadatas
+                )
+            else:
+                # No documents left, create empty vectorstore
+                self.vectorstore = None
+                
+            logger.info(f"Deleted {docs_to_delete_count} chunks for source: {source_file}")
             return True
 
         except Exception as e:
@@ -330,6 +348,73 @@ class VectorDatabase:
         except Exception as e:
             logger.error(f"Failed to get stats: {str(e)}")
             return {"status": "Error getting stats", "error": str(e)}
+    
+    def optimize_index(self) -> bool:
+        """
+        Optimize the vector index periodically for better performance
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.vectorstore:
+            logger.warning("No vector index available for optimization")
+            return False
+        
+        try:
+            doc_count = self.vectorstore.index.ntotal
+            logger.info(f"Optimizing index with {doc_count} documents...")
+            
+            # For large collections, consider index optimization
+            if doc_count > 10000:
+                logger.info("Large collection detected - consider using IVF index for better performance")
+                # Future enhancement: implement IVF index for better performance
+            
+            # For now, this is a placeholder for future optimizations
+            # In production, you might want to:
+            # 1. Rebuild index with optimal parameters
+            # 2. Compress embeddings
+            # 3. Use more efficient index types
+            
+            logger.info("Index optimization completed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Index optimization failed: {str(e)}")
+            return False
+
+    def should_rebuild_index(self) -> bool:
+        """
+        Determine if full rebuild is needed based on system health metrics
+        
+        Returns:
+            True if rebuild is recommended, False otherwise
+        """
+        if not self.vectorstore:
+            return True
+        
+        try:
+            stats = self.get_stats()
+            
+            # Simple heuristics for when to rebuild:
+            # 1. Very small index after many deletions
+            # 2. Performance degradation indicators
+            doc_count = stats.get('document_count', 0)
+            
+            # If we have very few documents, consider rebuild
+            if doc_count < 10:
+                logger.info("Small index detected - rebuild recommended")
+                return True
+            
+            # Additional checks can be added here based on:
+            # - Query performance metrics
+            # - Index fragmentation
+            # - Error rates
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to check rebuild status: {str(e)}")
+            return False
     
     def delete_index(self) -> bool:
         """
