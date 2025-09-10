@@ -48,4 +48,11 @@ Data/Docs/
 .DS_Store
 Thumbs.db
 
-./streamlit_app_backup.py
+# Ignore virtual environment
+rag_env/
+
+# Ignore data files
+Data/
+
+# Ignore backup files
+streamlit_app_backup.py
