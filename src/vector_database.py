@@ -129,7 +129,8 @@ class VectorDatabase:
             self.vectorstore = FAISS.load_local(
                 str(self.db_path),
                 self.embeddings,
-                self.index_name
+                self.index_name,
+                # allow_dangerous_deserialization=True
             )
             
             logger.info("✅ Vector index loaded successfully!")

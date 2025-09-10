@@ -6,6 +6,14 @@ langchain-community>=0.0.10
 PyPDF2>=3.0.0
 pypdf>=3.17.0
 
+# Document processing for various file types
+unstructured[docx,pptx]>=0.12.0
+python-magic>=0.4.27
+langchain-unstructured>=0.0.1
+# For image support (optional, uncomment to enable)
+# pytesseract>=0.3.10
+# pillow>=10.0.0
+
 # Vector database
 faiss-cpu>=1.7.0
 
@@ -25,3 +33,9 @@ plotly>=5.15.0
 
 # File system monitoring
 watchdog>=2.3.0
+
+# Note on libmagic:
+# The `python-magic` library requires the `libmagic` system library to be installed.
+# On macOS, this can be installed with Homebrew: `brew install libmagic`
+# On Debian/Ubuntu, use: `sudo apt-get install libmagic1`
+# This is a system dependency and cannot be installed via pip.

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from src.nvidia_embeddings import NVIDIAEmbeddings
-from src.document_loader import PDFDocumentLoader
+from src.document_loader import DocumentLoader
 from src.vector_database import VectorDatabase
 from src.rag_agent import RAGAgent
 
@@ -40,8 +40,9 @@ def test_environment():
         Path(docs_folder).mkdir(parents=True, exist_ok=True)
         print(f"📁 Created docs folder: {docs_folder}")
     else:
-        pdf_files = list(Path(docs_folder).glob("*.pdf"))
-        print(f"✅ Docs folder exists with {len(pdf_files)} PDF files")
+        files = list(Path(docs_folder).rglob("*"))
+        supported_files = [f for f in files if f.is_file() and f.suffix.lower() in DocumentLoader.SUPPORTED_EXTENSIONS]
+        print(f"✅ Docs folder exists with {len(supported_files)} supported files")
     
     return True
 
@@ -88,19 +89,19 @@ def test_document_loader():
     
     try:
         docs_folder = os.getenv("DOCS_FOLDER", "Data/Docs")
-        loader = PDFDocumentLoader(docs_folder)
+        loader = DocumentLoader(docs_folder)
         
         # Load documents
         documents = loader.load_and_split()
         
         if not documents:
-            print("⚠️  No documents loaded (no PDF files found)")
-            return True  # Not a failure if no PDFs exist
+            print("⚠️  No documents loaded (no supported files found)")
+            return True  # Not a failure if no files exist
         
         # Get stats
         stats = loader.get_document_stats(documents)
         
-        print(f"✅ Loaded {stats['num_source_files']} PDF files")
+        print(f"✅ Loaded {stats['num_source_files']} files")
         print(f"✅ Created {stats['total_chunks']} document chunks")
         print(f"✅ Total characters: {stats['total_characters']:,}")
         print(f"✅ Average chunk size: {stats['average_chunk_size']}")
@@ -174,8 +175,8 @@ def test_rag_agent():
         
         print("🔍 Setting up knowledge base...")
         if not rag_agent.setup_knowledge_base():
-            print("⚠️  Knowledge base setup failed (likely no PDF files)")
-            return True  # Not a failure if no PDFs exist
+            print("⚠️  Knowledge base setup failed (likely no supported files)")
+            return True  # Not a failure if no files exist
         
         print("✅ Knowledge base setup successful")
         

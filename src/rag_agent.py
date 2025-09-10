@@ -15,7 +15,7 @@ from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from langchain.llms.base import LLM
 
-from .document_loader import PDFDocumentLoader
+from .document_loader import DocumentLoader
 from .nvidia_embeddings import NVIDIAEmbeddings
 from .vector_database import VectorDatabase
 
@@ -102,9 +102,11 @@ class RAGAgent:
         self.docs_folder = docs_folder
         self.api_key = api_key
         self.vector_db_path = vector_db_path
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
         
         # Initialize components
-        self.document_loader = PDFDocumentLoader(docs_folder, chunk_size, chunk_overlap)
+        self.document_loader = DocumentLoader(docs_folder)
         self.embeddings = NVIDIAEmbeddings(api_key)
         self.vector_db = VectorDatabase(self.embeddings, vector_db_path)
         self.llm = SimpleNVIDIALLM(api_key)
@@ -144,7 +146,10 @@ Answer: """
             logger.info("Building knowledge base from PDF documents...")
             
             # Load and process documents
-            documents = self.document_loader.load_and_split()
+            documents = self.document_loader.load_and_split(
+                chunk_size=self.chunk_size, 
+                chunk_overlap=self.chunk_overlap
+            )
             
             if not documents:
                 logger.error("No documents found to build knowledge base")
@@ -273,8 +278,11 @@ Answer: """
         # Add document loader stats if available
         try:
             if os.path.exists(self.docs_folder):
-                pdf_files = list(Path(self.docs_folder).glob("*.pdf"))
-                vector_stats["pdf_files_available"] = len(pdf_files)
+                all_files = list(Path(self.docs_folder).rglob("*"))
+                supported_files = [
+                    f for f in all_files if f.is_file() and f.suffix.lower() in self.document_loader.SUPPORTED_EXTENSIONS
+                ]
+                vector_stats["files_available"] = len(supported_files)
                 vector_stats["docs_folder"] = self.docs_folder
         except Exception:
             pass
@@ -295,8 +303,11 @@ Answer: """
             folder = new_docs_folder or self.docs_folder
             
             # Load new documents
-            loader = PDFDocumentLoader(folder)
-            new_documents = loader.load_and_split()
+            loader = DocumentLoader(folder)
+            new_documents = loader.load_and_split(
+                chunk_size=self.chunk_size, 
+                chunk_overlap=self.chunk_overlap
+            )
             
             if not new_documents:
                 logger.warning("No new documents found to add")
@@ -329,15 +340,19 @@ Answer: """
         try:
             from pathlib import Path
             
-            # Check if file exists and is a PDF
+            # Check if file exists
             path = Path(file_path)
-            if not path.exists() or path.suffix.lower() != '.pdf':
-                logger.error(f"File not found or not a PDF: {file_path}")
+            if not path.exists():
+                logger.error(f"File not found: {file_path}")
                 return False
             
             # Load the single document
-            loader = PDFDocumentLoader(str(path.parent))
-            documents = loader.load_pdf(str(path))
+            loader = DocumentLoader(str(path.parent))
+            documents = loader.load_file(
+                path, 
+                chunk_size=self.chunk_size, 
+                chunk_overlap=self.chunk_overlap
+            )
             
             if not documents:
                 logger.warning(f"No content extracted from: {file_path}")
@@ -360,7 +375,7 @@ Answer: """
         Update a document in the knowledge base
         
         Args:
-            file_path: Path to the PDF file to update
+            file_path: Path to the file to update
             
         Returns:
             True if successful, False otherwise
@@ -368,15 +383,19 @@ Answer: """
         try:
             from pathlib import Path
             
-            # Check if file exists and is a PDF
+            # Check if file exists
             path = Path(file_path)
-            if not path.exists() or path.suffix.lower() != '.pdf':
-                logger.error(f"File not found or not a PDF: {file_path}")
+            if not path.exists():
+                logger.error(f"File not found: {file_path}")
                 return False
             
             # Load the updated document
-            loader = PDFDocumentLoader(str(path.parent))
-            documents = loader.load_pdf(str(path))
+            loader = DocumentLoader(str(path.parent))
+            documents = loader.load_file(
+                path, 
+                chunk_size=self.chunk_size, 
+                chunk_overlap=self.chunk_overlap
+            )
             
             if not documents:
                 logger.warning(f"No content extracted from: {file_path}")
@@ -451,7 +470,7 @@ Answer: """
     def stop_file_watcher(self) -> None:
         """Stop the file watcher"""
         try:
-            if self.file_watcher_observer is not None:
+            if hasattr(self, 'file_watcher_observer') and self.file_watcher_observer is not None:
                 self.file_watcher_observer.stop()
                 self.file_watcher_observer.join()
                 self.file_watcher_observer = None
@@ -509,8 +528,10 @@ Answer: """
                 }
                 health["overall_status"] = "degraded"
             
+            # Get unified stats
+            vector_stats = self.get_knowledge_base_stats()
+
             # Check vector database
-            vector_stats = self.vector_db.get_stats()
             health["components"]["vector_database"] = {
                 "status": "online" if vector_stats.get("status") == "Index loaded" else "offline",
                 "document_count": vector_stats.get("document_count", 0),
@@ -522,16 +543,15 @@ Answer: """
             
             # Check file watcher
             health["components"]["file_watcher"] = {
-                "status": "active" if self.file_watcher_observer else "inactive"
+                "status": "active" if self.file_watcher_observer and self.file_watcher_observer.is_alive() else "inactive"
             }
             
             # Check documents folder
             try:
                 docs_path = Path(self.docs_folder)
-                pdf_count = len(list(docs_path.glob("*.pdf"))) if docs_path.exists() else 0
                 health["components"]["documents_folder"] = {
                     "status": "accessible" if docs_path.exists() else "not_found",
-                    "pdf_files": pdf_count,
+                    "files_available": vector_stats.get("files_available", 0),
                     "path": str(docs_path)
                 }
             except Exception as e:

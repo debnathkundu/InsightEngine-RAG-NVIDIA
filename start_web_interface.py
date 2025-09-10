@@ -60,15 +60,18 @@ def check_environment():
     docs_folder = Path("Data/Docs")
     if not docs_folder.exists():
         print("❌ Data/Docs folder not found")
-        print("📁 Please create the Data/Docs folder and add your PDF files")
+        print("📁 Please create the Data/Docs folder and add your files")
         return False
     
-    pdf_files = list(docs_folder.glob("*.pdf"))
-    if not pdf_files:
-        print("⚠️  No PDF files found in Data/Docs folder")
-        print("📄 Please add your PDF files to the Data/Docs folder")
+    all_files = list(docs_folder.rglob("*"))
+    supported_extensions = ['.pdf', '.docx', '.pptx', '.txt']
+    supported_files = [f for f in all_files if f.is_file() and f.suffix.lower() in supported_extensions]
+
+    if not supported_files:
+        print("⚠️  No supported files found in Data/Docs folder")
+        print("📄 Please add your files to the Data/Docs folder")
     else:
-        print(f"✅ Found {len(pdf_files)} PDF files in Data/Docs")
+        print(f"✅ Found {len(supported_files)} supported files in Data/Docs")
     
     return True
 

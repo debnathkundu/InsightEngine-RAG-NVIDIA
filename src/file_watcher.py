@@ -56,12 +56,13 @@ class BatchDocumentChangeHandler(FileSystemEventHandler):
         self.debounce_set = set()
 
     def _is_valid_file(self, event: FileSystemEvent) -> bool:
-        """Checks if the event corresponds to a PDF file we should process."""
+        """Checks if the event corresponds to a supported file we should process."""
         if event.is_directory:
             return False
         
         file_path = Path(event.src_path)
-        if file_path.suffix.lower() != ".pdf":
+        supported_extensions = self.rag_agent.document_loader.SUPPORTED_EXTENSIONS.keys()
+        if file_path.suffix.lower() not in supported_extensions:
             return False
             
         # Debounce check - avoid processing the same file too quickly
@@ -199,7 +200,8 @@ class BatchDocumentChangeHandler(FileSystemEventHandler):
         file_path = Path(event.src_path)
         
         # For deleted files, check extension from the path (file doesn't exist anymore)
-        if file_path.suffix.lower() != ".pdf":
+        supported_extensions = self.rag_agent.document_loader.SUPPORTED_EXTENSIONS.keys()
+        if file_path.suffix.lower() not in supported_extensions:
             return
             
         self._schedule_operation('deleted', event.src_path)

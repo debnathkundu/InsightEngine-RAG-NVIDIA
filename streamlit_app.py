@@ -507,7 +507,7 @@ def display_sidebar(rag_agent):
         with kb_col1:
             st.metric("Documents", vector_status.get("document_count", 0))
         with kb_col2:
-            st.metric("PDF Files", docs_status.get("pdf_files", 0))
+            st.metric("Files", docs_status.get("files_available", 0))
         
         # File watcher status
         watcher_status = components.get("file_watcher", {})
@@ -594,7 +594,7 @@ def display_sidebar(rag_agent):
         
         # Document types supported
         st.sidebar.markdown("### 📖 Supported Documents")
-        doc_types = [ "📄 PDF | 📄 Word Docs | 📊 Excel Sheets | 📽️ PowerPoint | 📝 Text Files" ]
+        doc_types = [ "📄 PDF | 📄 Word Docs | 📽️ PowerPoint | 📝 Text Files" ]
             # "🌐 Web Pages", "📰 Articles", "📑 Reports
             # "📚 Research Papers", "🔧 Technical Docs", "⚖️ Legal Documents",
             # "🏢 Corporate Policies", "🎓 Training Materials", "📖 User Manuals",
@@ -948,7 +948,7 @@ def display_document_stats(rag_agent):
     with col1:
         st.metric("📄 Total Documents", stats.get('document_count', 0))
     with col2:
-        st.metric("📁 PDF Files", stats.get('pdf_files_available', 0))
+        st.metric("📁 Supported Files", stats.get('files_available', 0))
     with col3:
         st.metric("🔍 Searchable Chunks", stats.get('document_count', 0))
     with col4:
@@ -993,8 +993,8 @@ def display_document_stats(rag_agent):
         
         # File system metrics
         docs_component = components.get("documents_folder", {})
-        if "pdf_files" in docs_component:
-            st.info(f"📁 Available PDFs: {docs_component['pdf_files']}")
+        if "files_available" in docs_component:
+            st.info(f"📁 Available Files: {docs_component['files_available']}")
         
         st.info("🚀 Average Query Time: 2-8 seconds")
 
