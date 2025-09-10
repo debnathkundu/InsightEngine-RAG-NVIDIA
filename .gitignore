@@ -34,7 +34,8 @@ vector_db/
 *.pkl
 
 # PDF documents (exclude user documents but keep folder structure)
-Data/Docs/*.pdf
+Data/Docs/ 
+#*.pdf
 !Data/Docs/.gitkeep
 
 # IDE
@@ -46,3 +47,5 @@ Data/Docs/*.pdf
 # OS
 .DS_Store
 Thumbs.db
+
+./streamlit_app_backup.py
