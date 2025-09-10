@@ -45,9 +45,140 @@ def process_file_watcher_notifications():
                 notification["filename"],
                 notification["details"]
             )
+            
+            # Also add vector store update messages to chat timeline
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
+            
+            # Create detailed chat message for vector store updates
+            timestamp = datetime.now()
+            time_str = timestamp.strftime("%H:%M:%S")
+            filename = notification["filename"]
+            details = notification.get("details", {})
+            
+            if notification["type"] == "document_added":
+                chat_message = f"**📥 Vector Store Update [{time_str}]**\n\n"
+                chat_message += f"**Status**: DOCUMENT ADDED\n"
+                chat_message += f"**File**: `{filename}`\n"
+                chat_message += f"**Details**: Document has been processed and added to the vector database."
+                
+            elif notification["type"] == "document_removed":
+                chat_message = f"**🗑️ Vector Store Update [{time_str}]**\n\n"
+                chat_message += f"**Status**: DOCUMENT REMOVED\n"
+                chat_message += f"**File**: `{filename}`\n"
+                chat_message += f"**Details**: Document has been removed from the vector database."
+                
+            elif notification["type"] == "document_updated":
+                chat_message = f"**🔄 Vector Store Update [{time_str}]**\n\n"
+                chat_message += f"**Status**: DOCUMENT UPDATED\n"
+                chat_message += f"**File**: `{filename}`\n"
+                chat_message += f"**Details**: Document has been updated in the vector database."
+                
+            elif notification["type"] == "vector_db_updated":
+                operations = details.get("operations", 0)
+                deleted = details.get("deleted", 0)
+                added = details.get("added", 0)
+                updated = details.get("updated", 0)
+                
+                chat_message = f"**💾 Vector Store Batch Update [{time_str}]**\n\n"
+                chat_message += f"**Status**: BATCH OPERATION COMPLETE\n"
+                chat_message += f"**Total Operations**: {operations}\n"
+                if added > 0:
+                    chat_message += f"**Documents Added**: {added}\n"
+                if updated > 0:
+                    chat_message += f"**Documents Updated**: {updated}\n"
+                if deleted > 0:
+                    chat_message += f"**Documents Removed**: {deleted}\n"
+                chat_message += f"**Details**: Vector database has been updated with batch file operations."
+            else:
+                # Skip other notification types for chat timeline
+                continue
+            
+            # Add the vector store update message to chat
+            st.session_state.messages.append({
+                "role": "system",
+                "content": chat_message,
+                "timestamp": timestamp,
+                "type": "vector_store_update",
+                "status_type": notification["type"]
+            })
+            
     except Exception as e:
         # Silently handle errors to avoid disrupting the main app
         pass
+
+def status_callback(update):
+    """Thread-safe callback function to handle vector database status updates"""
+    try:
+        # Add status update directly to chat messages for chronological flow
+        if "messages" not in st.session_state:
+            st.session_state.messages = []
+        
+        # Format status message for chat timeline
+        time_str = update.timestamp.strftime("%H:%M:%S")
+        file_info = f" - {Path(update.file_path).name}" if hasattr(update, 'file_path') and update.file_path else ""
+        
+        # Choose icon and create detailed status text based on status
+        if hasattr(update, 'status'):
+            status_str = str(update.status).upper()
+            if "ERROR" in status_str:
+                icon = "🔴"
+                status_text = "ERROR"
+                detail_text = "An error occurred during the vector database operation."
+            elif "ADDING" in status_str:
+                icon = "📥"
+                status_text = "ADDING DOCUMENT"
+                detail_text = "Processing and adding new document to the knowledge base."
+            elif "UPDATING" in status_str:
+                icon = "🔄"
+                status_text = "UPDATING DOCUMENT"
+                detail_text = "Updating existing document in the knowledge base."
+            elif "REMOVING" in status_str:
+                icon = "🗑️"
+                status_text = "REMOVING DOCUMENT"
+                detail_text = "Removing document from the vector database."
+            elif "REBUILDING" in status_str:
+                icon = "🔨"
+                status_text = "REBUILDING DATABASE"
+                detail_text = "Rebuilding the entire knowledge base from scratch."
+            else:  # IDLE or COMPLETE
+                icon = "🟢"
+                status_text = "OPERATION COMPLETE"
+                detail_text = "Vector database operation completed successfully."
+        else:
+            icon = "🟡"
+            status_text = "VECTOR DB UPDATE"
+            detail_text = "Vector database operation in progress."
+        
+        # Create comprehensive status message for chat
+        status_message = f"**{icon} Vector Database Update [{time_str}]**\n\n"
+        status_message += f"**Status**: {status_text}\n"
+        status_message += f"**Operation**: {update.message}{file_info}\n"
+        status_message += f"**Details**: {detail_text}"
+        
+        # Add progress info if available
+        if hasattr(update, 'progress') and update.progress is not None:
+            progress_percent = update.progress * 100
+            progress_bar = "█" * int(update.progress * 20)
+            spaces = "░" * (20 - int(update.progress * 20))
+            status_message += f"\n\n**Progress**: [{progress_bar}{spaces}] {progress_percent:.1f}%"
+        
+        # Add file path info if available
+        if hasattr(update, 'file_path') and update.file_path:
+            status_message += f"\n**File**: `{Path(update.file_path).name}`"
+        
+        # Add as a system message in chat with vector DB status type
+        st.session_state.messages.append({
+            "role": "system",
+            "content": status_message,
+            "timestamp": update.timestamp,
+            "type": "vector_db_status",
+            "status_type": getattr(update, 'status', 'unknown')
+        })
+        
+    except Exception as e:
+        # Log error but don't crash the application
+        print(f"Status callback error: {e}")
 
 def display_system_message(notification_type: str, filename: str = "", details: dict = None):
     """Display system messages (file operations, indexing updates, etc.)"""
@@ -204,6 +335,16 @@ st.markdown("""
         background-color: #4caf50;
     }
     
+    .status-updating {
+        background-color: #fff3cd;
+        border-left-color: #ffc107 !important;
+    }
+    
+    .status-error {
+        background-color: #f8d7da;
+        border-left-color: #dc3545 !important;
+    }
+    
     .status-offline {
         background-color: #f44336;
     }
@@ -252,12 +393,30 @@ def initialize_rag_agent():
 
         # Initialize RAG agent
         with st.spinner("🤖 Initializing RAG Agent..."):
-            rag_agent = RAGAgent(docs_folder, api_key)
+            try:
+                # Try to initialize with status callback for vector DB notifications
+                rag_agent = RAGAgent(docs_folder, api_key, status_callback=status_callback)
+            except TypeError:
+                # Fallback if status_callback parameter is not supported
+                rag_agent = RAGAgent(docs_folder, api_key)
 
         # Setup knowledge base
         with st.spinner("📚 Loading knowledge base..."):
             if rag_agent.setup_knowledge_base():
                 st.success("✅ RAG system initialized successfully!")
+                
+                # Add initialization message to chat timeline
+                if "messages" not in st.session_state:
+                    st.session_state.messages = []
+                
+                init_message = {
+                    "role": "system",
+                    "content": "🚀 **System Initialization Complete**\n\nRAG Assistant has been successfully initialized and is ready to answer your questions about your document collection!",
+                    "timestamp": datetime.now(),
+                    "type": "system_init"
+                }
+                st.session_state.messages.append(init_message)
+                
                 return rag_agent
             else:
                 st.error("❌ Failed to setup knowledge base")
@@ -333,9 +492,9 @@ def display_sidebar(rag_agent):
 
         # Display overall status messages
         if vector_status.get("status") == "online":
-            st.sidebar.success("🟢 Vector Database Online")
+            st.sidebar.success("🟢 FAISS Vector Database Online")
         else:
-            st.sidebar.error("🔴 Vector Database Offline")
+            st.sidebar.error("🔴 FAISS Vector Database Offline")
 
         if docs_status.get("status") == "accessible":
             st.sidebar.success("🟢 Documents Folder Accessible")
@@ -379,9 +538,48 @@ def display_sidebar(rag_agent):
                             "time_taken": end_time - start_time
                         })
                         
+                        # Add timestamp message to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**⚡ Vector Store Optimization [{time_str}]**\n\n"
+                        chat_message += f"**Status**: OPTIMIZATION COMPLETE\n"
+                        chat_message += f"**Documents**: {stats.get('document_count', 0)}\n"
+                        chat_message += f"**Time Taken**: {end_time - start_time:.1f} seconds\n"
+                        chat_message += f"**Details**: Vector database has been optimized for better performance."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "vector_store_update",
+                            "status_type": "optimization_complete"
+                        })
+                        
                         st.success("✅ Optimization completed!")
                     else:
                         add_system_notification("error", "Knowledge base optimization failed")
+                        
+                        # Add error message to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**❌ Vector Store Optimization Failed [{time_str}]**\n\n"
+                        chat_message += f"**Status**: OPTIMIZATION FAILED\n"
+                        chat_message += f"**Details**: Vector database optimization could not be completed."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "vector_store_update",
+                            "status_type": "optimization_failed"
+                        })
+                        
                         st.error("❌ Optimization failed")
         
         with col2:
@@ -395,11 +593,12 @@ def display_sidebar(rag_agent):
         
         # Document types supported
         st.sidebar.markdown("### 📖 Supported Documents")
-        doc_types = [
-            "📚 Research Papers", "🔧 Technical Docs", "⚖️ Legal Documents",
-            "🏢 Corporate Policies", "🎓 Training Materials", "📖 User Manuals",
-            "✅ Compliance Docs", "📊 Reports", "📝 Contracts"
-        ]
+        doc_types = [ "📄 PDF | 📄 Word Docs | 📊 Excel Sheets | 📽️ PowerPoint | 📝 Text Files" ]
+            # "🌐 Web Pages", "📰 Articles", "📑 Reports
+            # "📚 Research Papers", "🔧 Technical Docs", "⚖️ Legal Documents",
+            # "🏢 Corporate Policies", "🎓 Training Materials", "📖 User Manuals",
+            # "✅ Compliance Docs", "📊 Reports", "📝 Contracts"
+        
 
         for doc_type in doc_types:
             st.sidebar.markdown(f"• {doc_type}")
@@ -446,12 +645,56 @@ def display_chat_interface(rag_agent):
             time_str = timestamp.strftime("%H:%M:%S")
             
             if message["role"] == "system":
-                # System notifications (file operations, indexing, etc.)
-                display_system_message(
-                    message.get("type", "system"),
-                    message.get("filename", ""),
-                    message.get("details", {})
-                )
+                # System notifications including vector DB status updates
+                message_type = message.get("type", "system")
+                status_type = message.get("status_type", "")
+                
+                # Different styling for vector DB status messages
+                if message_type == "vector_db_status":
+                    # Vector database status messages with enhanced styling
+                    if "error" in str(status_type).lower():
+                        status_class = "status-error"
+                    elif any(word in str(status_type).lower() for word in ["updating", "adding", "removing", "rebuilding"]):
+                        status_class = "status-updating"
+                    else:
+                        status_class = "status-online"
+                    
+                    st.markdown(f"""
+                    <div class="chat-message {status_class}" style="border-left: 4px solid #6c757d; background-color: #f8f9fa; margin: 0.5rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong>🔧 Vector Database</strong>
+                            <small style="color: #666;">{time_str}</small>
+                        </div>
+                        {message["content"]}
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif message_type == "vector_store_update":
+                    # Vector store update messages from file watcher
+                    if "error" in str(status_type).lower():
+                        status_class = "status-error"
+                    elif any(word in str(status_type).lower() for word in ["document_added", "document_updated", "vector_db_updated"]):
+                        status_class = "status-updating"
+                    elif "document_removed" in str(status_type).lower():
+                        status_class = "status-error"
+                    else:
+                        status_class = "status-online"
+                    
+                    st.markdown(f"""
+                    <div class="chat-message {status_class}" style="border-left: 4px solid #9c27b0; background-color: #f3e5f5; margin: 0.5rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong>💾 Vector Store</strong>
+                            <small style="color: #666;">{time_str}</small>
+                        </div>
+                        {message["content"]}
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # Regular system notifications
+                    display_system_message(
+                        message.get("type", "system"),
+                        message.get("filename", ""),
+                        message.get("details", {})
+                    )
             elif message["role"] == "user":
                 # User messages
                 st.markdown(f"""
@@ -763,12 +1006,73 @@ def display_document_stats(rag_agent):
         if st.button("🔄 Optimize Knowledge Base", help="Optimize vector database for better performance"):
             with st.spinner("🔧 Optimizing knowledge base..."):
                 try:
+                    start_time = time.time()
                     if rag_agent.optimize_knowledge_base():
+                        end_time = time.time()
+                        stats = rag_agent.get_knowledge_base_stats()
+                        
+                        # Add timestamp message to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**⚡ Vector Store Optimization [{time_str}]**\n\n"
+                        chat_message += f"**Status**: OPTIMIZATION COMPLETE\n"
+                        chat_message += f"**Documents**: {stats.get('document_count', 0)}\n"
+                        chat_message += f"**Time Taken**: {end_time - start_time:.1f} seconds\n"
+                        chat_message += f"**Details**: Vector database optimized from Document Statistics page."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "vector_store_update",
+                            "status_type": "optimization_complete"
+                        })
+                        
                         st.success("✅ Knowledge base optimized successfully!")
                         st.balloons()
                     else:
+                        # Add error message to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**❌ Vector Store Optimization Failed [{time_str}]**\n\n"
+                        chat_message += f"**Status**: OPTIMIZATION FAILED\n"
+                        chat_message += f"**Details**: Vector database optimization could not be completed."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "vector_store_update",
+                            "status_type": "optimization_failed"
+                        })
+                        
                         st.error("❌ Optimization failed. Check system logs.")
                 except Exception as e:
+                    # Add error message to chat
+                    if "messages" not in st.session_state:
+                        st.session_state.messages = []
+                    
+                    timestamp = datetime.now()
+                    time_str = timestamp.strftime("%H:%M:%S")
+                    chat_message = f"**❌ Vector Store Optimization Error [{time_str}]**\n\n"
+                    chat_message += f"**Status**: OPTIMIZATION ERROR\n"
+                    chat_message += f"**Error**: {str(e)}\n"
+                    chat_message += f"**Details**: An error occurred during vector database optimization."
+                    
+                    st.session_state.messages.append({
+                        "role": "system",
+                        "content": chat_message,
+                        "timestamp": timestamp,
+                        "type": "vector_store_update",
+                        "status_type": "optimization_error"
+                    })
+                    
                     st.error(f"❌ Optimization error: {str(e)}")
     
     with action_col2:
@@ -803,15 +1107,86 @@ def display_document_stats(rag_agent):
                                 "time_taken": end_time - start_time
                             })
                             
+                            # Add timestamp message to chat
+                            if "messages" not in st.session_state:
+                                st.session_state.messages = []
+                            
+                            timestamp = datetime.now()
+                            time_str = timestamp.strftime("%H:%M:%S")
+                            chat_message = f"**🔨 Vector Store Rebuild [{time_str}]**\n\n"
+                            chat_message += f"**Status**: REBUILD COMPLETE\n"
+                            chat_message += f"**Documents**: {stats.get('document_count', 0)}\n"
+                            chat_message += f"**Time Taken**: {end_time - start_time:.1f} seconds\n"
+                            chat_message += f"**Details**: Vector database has been completely rebuilt from scratch."
+                            
+                            st.session_state.messages.append({
+                                "role": "system",
+                                "content": chat_message,
+                                "timestamp": timestamp,
+                                "type": "vector_store_update",
+                                "status_type": "rebuild_complete"
+                            })
+                            
                             st.success("✅ Knowledge base rebuilt successfully!")
                             st.balloons()
                         else:
                             add_system_notification("error", "Knowledge base rebuild failed")
+                            
+                            # Add error message to chat
+                            if "messages" not in st.session_state:
+                                st.session_state.messages = []
+                            
+                            timestamp = datetime.now()
+                            time_str = timestamp.strftime("%H:%M:%S")
+                            chat_message = f"**❌ Vector Store Rebuild Failed [{time_str}]**\n\n"
+                            chat_message += f"**Status**: REBUILD FAILED\n"
+                            chat_message += f"**Details**: Vector database rebuild could not be completed."
+                            
+                            st.session_state.messages.append({
+                                "role": "system",
+                                "content": chat_message,
+                                "timestamp": timestamp,
+                                "type": "vector_store_update",
+                                "status_type": "rebuild_failed"
+                            })
+                            
                             st.error("❌ Rebuild failed. Check system logs.")
                     except Exception as e:
                         add_system_notification("error", f"Rebuild error: {str(e)}")
+                        
+                        # Add error message to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**❌ Vector Store Rebuild Error [{time_str}]**\n\n"
+                        chat_message += f"**Status**: REBUILD ERROR\n"
+                        chat_message += f"**Error**: {str(e)}\n"
+                        chat_message += f"**Details**: An error occurred during vector database rebuild."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "vector_store_update",
+                            "status_type": "rebuild_error"
+                        })
+                        
                         st.error(f"❌ Rebuild error: {str(e)}")
-
+    
+    # Real-time file monitoring status
+    if health.get("components", {}).get("file_watcher", {}).get("status") == "active":
+        st.markdown("### 👀 Real-time File Monitoring")
+        st.success("🔄 **Auto-updates enabled** - The system will automatically detect and process new PDF files added to your documents folder")
+        st.info("� **Monitored folder**: " + str(docs_component.get("path", "Unknown")))
+        st.info("⚡ **Processing mode**: Batch processing with 5-second delay for optimal performance")
+    else:
+        st.markdown("### 👀 File Monitoring")
+        st.warning("🔄 Auto-updates currently disabled")
+        st.info("� Restart the system to enable automatic file monitoring")
+        
+        
     # Document types breakdown with enhanced visualization
     st.markdown("### 📖 Supported Document Types & Use Cases")
     
@@ -827,21 +1202,17 @@ def display_document_stats(rag_agent):
             for doc_type in doc_types:
                 st.markdown(f"• {doc_type}")
 
-    # Real-time file monitoring status
-    if health.get("components", {}).get("file_watcher", {}).get("status") == "active":
-        st.markdown("### 👀 Real-time File Monitoring")
-        st.success("🔄 **Auto-updates enabled** - The system will automatically detect and process new PDF files added to your documents folder")
-        st.info("� **Monitored folder**: " + str(docs_component.get("path", "Unknown")))
-        st.info("⚡ **Processing mode**: Batch processing with 5-second delay for optimal performance")
-    else:
-        st.markdown("### 👀 File Monitoring")
-        st.warning("🔄 Auto-updates currently disabled")
-        st.info("� Restart the system to enable automatic file monitoring")
-
 def main():
     """Main application function"""
     # Process any pending file watcher notifications
     process_file_watcher_notifications()
+    
+    # Auto-refresh every 5 seconds to show new vector DB updates
+    if "auto_refresh" not in st.session_state:
+        st.session_state.auto_refresh = True
+    
+    if st.session_state.auto_refresh:
+        time.sleep(0.1)  # Small delay for UI responsiveness
     
     # Display header
     display_header()
@@ -864,17 +1235,17 @@ def main():
             display_chat_interface(rag_agent)
     
     with col2:
-        # Quick actions and tips
-        st.markdown("### 💡 Quick Tips")
-        st.info("""
-        **Sample Questions:**
-        • What is the main topic of the documents?
-        • Summarize the key points
-        • What are the requirements mentioned?
-        • How does [concept A] relate to [concept B]?
-        • What are the benefits described?
-        • Explain the process for [specific topic]
-        """)
+        # # Quick actions and tips
+        # st.markdown("### 💡 Quick Tips")
+        # st.info("""
+        # **Sample Questions:**
+        # • What is the main topic of the documents?
+        # • Summarize the key points
+        # • What are the requirements mentioned?
+        # • How does [concept A] relate to [concept B]?
+        # • What are the benefits described?
+        # • Explain the process for [specific topic]
+        # """)
 
         # Advanced features
         st.markdown("### 🛠️ Actions")
@@ -911,18 +1282,37 @@ def main():
         # Knowledge base rebuild
         if st.button("🔄 Rebuild Knowledge Base"):
             add_system_notification("system", "Clearing cache and rebuilding knowledge base")
+            
+            # Add timestamp message to chat
+            if "messages" not in st.session_state:
+                st.session_state.messages = []
+            
+            timestamp = datetime.now()
+            time_str = timestamp.strftime("%H:%M:%S")
+            chat_message = f"**🔄 Vector Store Cache Clear [{time_str}]**\n\n"
+            chat_message += f"**Status**: CACHE CLEARED\n"
+            chat_message += f"**Details**: System cache cleared and knowledge base will be reloaded."
+            
+            st.session_state.messages.append({
+                "role": "system",
+                "content": chat_message,
+                "timestamp": timestamp,
+                "type": "vector_store_update",
+                "status_type": "cache_cleared"
+            })
+            
             st.cache_resource.clear()
             st.rerun()
 
-        # System information
-        st.markdown("### ℹ️ About")
-        st.markdown("""
-        This AI assistant is powered by:
-        - **NVIDIA** embedding models
-        - **Meta LLaMA** language model
-        - **FAISS** vector database
-        - **1,869** legal document chunks
-        """)
+        # # System information
+        # st.markdown("### ℹ️ About")
+        # st.markdown("""
+        # This AI assistant is powered by:
+        # - **NVIDIA** embedding models
+        # - **Meta LLaMA** language model
+        # - **FAISS** vector database
+        # - **1,869** legal document chunks
+        # """)
 
         # Chat statistics
         if st.session_state.messages:
