@@ -12,9 +12,10 @@ from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 from dotenv import load_dotenv
+from typing import Optional
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent / "src"))
+# Add project root to path, not the src folder
+sys.path.append(str(Path(__file__).parent))
 
 from src.rag_agent import RAGAgent
 from src.file_watcher import start_file_watcher, get_pending_notifications
@@ -1268,7 +1269,7 @@ def main():
                 st.download_button(
                     label="💾 Download Chat History",
                     data=export_data,
-                    file_name=f"difc_legal_chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    file_name=f"RAQ_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json"
                 )
             else:
