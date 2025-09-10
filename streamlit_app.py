@@ -1,6 +1,6 @@
 """
-DIFC Legal RAG - Streamlit Web Interface
-Beautiful, user-friendly web interface for the DIFC Legal RAG system
+Enterprise RAG - Streamlit Web Interface
+Beautiful, user-friendly web interface for the Enterprise RAG system
 """
 
 import streamlit as st
@@ -1269,7 +1269,7 @@ def main():
                 st.download_button(
                     label="💾 Download Chat History",
                     data=export_data,
-                    file_name=f"RAQ_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    file_name=f"RAG_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json"
                 )
             else:

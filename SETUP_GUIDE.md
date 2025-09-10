@@ -5,6 +5,7 @@ This guide provides detailed, step-by-step instructions for setting up and runni
 ## 📋 **Pre-Setup Checklist**
 
 Before you begin, ensure you have:
+
 - [ ] Python 3.8+ installed
 - [ ] Git installed
 - [ ] NVIDIA Developer Account created
@@ -16,10 +17,12 @@ Before you begin, ensure you have:
 ### **Creating Your NVIDIA Account**
 
 1. **Visit NVIDIA Build Platform**
+
    - Go to [build.nvidia.com](https://build.nvidia.com)
    - Click "Sign Up" in the top right corner
 
 2. **Complete Registration**
+
    - Fill in your details (name, email, password)
    - Verify your email address
    - Accept the terms of service
@@ -32,15 +35,18 @@ Before you begin, ensure you have:
 ### **Generating Your API Key**
 
 1. **Access Dashboard**
+
    - After logging in, go to your dashboard
    - Look for "API Keys" or "Credentials" section
 
 2. **Create New Key**
+
    - Click "Generate New API Key" or "Create API Key"
    - Give it a descriptive name: "RAG-Template-Project"
    - Select appropriate permissions (if asked)
 
 3. **Save Your Key**
+
    - **IMPORTANT**: Copy the key immediately
    - Store it in a secure location (password manager recommended)
    - You won't be able to see it again!
@@ -56,8 +62,7 @@ Before you begin, ensure you have:
 
 ```bash
 # Clone the repository
-git clone https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever.git
-
+git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA.git
 # Navigate to the project directory
 cd RAG-Template-for-NVIDIA-nemoretriever
 
@@ -112,37 +117,42 @@ pip list | grep -E "(streamlit|langchain|faiss|requests)"
 ### **Step 4: Environment Configuration**
 
 1. **Create Environment File**
+
    ```bash
    # Copy the template
    cp .env.template .env
-   
+
    # Verify the file was created
    ls -la .env
    ```
 
 2. **Edit the Environment File**
-   
+
    **Windows (using Notepad):**
+
    ```bash
    notepad .env
    ```
-   
+
    **macOS/Linux (using nano):**
+
    ```bash
    nano .env
    ```
-   
+
    **Or use any text editor:**
+
    ```bash
    code .env  # VS Code
    vim .env   # Vim
    ```
 
 3. **Configure Your Settings**
+
    ```env
    # NVIDIA API Configuration
    NVIDIA_API_KEY=nvapi-your-actual-api-key-here
-   
+
    # Optional Configuration (defaults shown)
    DOCS_FOLDER=Data/Docs
    VECTOR_DB_PATH=./vector_db
@@ -153,21 +163,24 @@ pip list | grep -E "(streamlit|langchain|faiss|requests)"
 ### **Step 5: Document Preparation**
 
 1. **Verify Folder Structure**
+
    ```bash
    # Check if Data/Docs exists
    ls -la Data/Docs
    ```
 
 2. **Add Your PDF Documents**
+
    - Copy your PDF files to `Data/Docs/` folder
    - Ensure files are valid PDFs
    - Check file permissions (readable)
 
 3. **Verify Document Setup**
+
    ```bash
    # List PDF files
    ls -la Data/Docs/*.pdf
-   
+
    # Count PDF files
    ls Data/Docs/*.pdf | wc -l
    ```
@@ -175,22 +188,24 @@ pip list | grep -E "(streamlit|langchain|faiss|requests)"
 ### **Step 6: System Testing**
 
 1. **Run Comprehensive Tests**
+
    ```bash
    # Run all system tests
    python test_rag_system.py
    ```
 
 2. **Test Individual Components**
+
    ```bash
    # Test NVIDIA API connection
    python src/nvidia_embeddings.py
-   
+
    # Test document loading
    python src/document_loader.py
-   
+
    # Test vector database
    python src/vector_database.py
-   
+
    # Test RAG agent
    python src/rag_agent.py
    ```
@@ -217,6 +232,7 @@ python main.py
 ### **Step 8: Access and Test**
 
 1. **Open Web Interface**
+
    - Open browser to `http://localhost:8501`
    - Wait for system initialization
    - Check system status in sidebar
@@ -229,6 +245,7 @@ python main.py
 ## 🔧 **Troubleshooting Common Issues**
 
 ### **Issue 1: Python Version Problems**
+
 ```bash
 # Check Python version
 python --version
@@ -240,6 +257,7 @@ python --version
 ```
 
 ### **Issue 2: Package Installation Failures**
+
 ```bash
 # Clear pip cache
 pip cache purge
@@ -254,6 +272,7 @@ pip install faiss-cpu
 ```
 
 ### **Issue 3: API Key Issues**
+
 ```bash
 # Verify .env file exists and has content
 cat .env
@@ -271,6 +290,7 @@ print('API Key:', os.getenv('NVIDIA_API_KEY')[:10] + '...')
 ```
 
 ### **Issue 4: Document Loading Problems**
+
 ```bash
 # Check file permissions
 ls -la Data/Docs/
@@ -285,6 +305,7 @@ cp "Data/Docs/your-file.pdf" test_docs/
 ```
 
 ### **Issue 5: Memory Issues**
+
 ```bash
 # Check available memory
 free -h  # Linux
@@ -322,6 +343,7 @@ If you encounter issues:
 ## 🎉 **Success!**
 
 Once everything is working:
+
 - Bookmark the web interface URL
 - Try different types of questions
 - Explore the document statistics

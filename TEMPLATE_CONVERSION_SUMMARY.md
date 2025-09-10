@@ -9,20 +9,24 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 ## 🎯 **What Changed**
 
 ### **🏷️ Branding & Naming**
+
 - **Before**: "DIFC Legal RAG Assistant"
 - **After**: "RAG Assistant - NVIDIA NemoRetriever"
 
 ### **🎨 Interface Updates**
+
 - **Header**: Changed from legal-specific to general AI assistant
 - **Icons**: Updated from ⚖️ (legal) to 🤖 (AI/tech)
 - **Messaging**: Removed all DIFC and legal-specific references
 - **Sample Questions**: Changed from legal queries to general document questions
 
 ### **📚 Content Areas**
+
 - **Before**: Legal areas (Employment Law, Contract Law, etc.)
 - **After**: Document types (Research Papers, Technical Docs, etc.)
 
 ### **💬 Chat Interface**
+
 - **Assistant Identity**: From "Legal Assistant" to "AI Assistant"
 - **User Prompts**: From "Ask about DIFC laws" to "Ask about your documents"
 - **Loading Messages**: From "Searching legal documents" to "Searching documents"
@@ -32,6 +36,7 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 ## 🌟 **New Universal Features**
 
 ### **📖 Supported Document Types**
+
 - Research Papers
 - Technical Documentation
 - Legal Documents
@@ -46,6 +51,7 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 - Reference Materials
 
 ### **💡 Sample Questions**
+
 - "What is the main topic of the documents?"
 - "Summarize the key points from [specific document]"
 - "What are the requirements for [specific process]?"
@@ -54,6 +60,7 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 - "Explain the process for [specific topic]"
 
 ### **🎯 Use Cases**
+
 - Legal document analysis
 - Research paper Q&A systems
 - Corporate knowledge bases
@@ -66,18 +73,21 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 ## 📁 **Files Updated**
 
 ### **Core Application Files**
+
 - ✅ `streamlit_app.py` - Web interface completely updated
 - ✅ `main.py` - CLI interface updated
 - ✅ `start_web_interface.py` - Launcher script updated
 - ✅ `test_rag_system.py` - Test descriptions updated
 
 ### **Documentation Files**
+
 - ✅ `WEB_INTERFACE_GUIDE.md` - Updated for general use
 - ✅ `PROJECT_SUMMARY.md` - Updated descriptions
 - ❌ `DIFC_LEGAL_RAG_SUMMARY.md` - Removed (DIFC-specific)
 - ❌ `SETUP_COMPLETE.md` - Removed (DIFC-specific)
 
 ### **Configuration Files**
+
 - ✅ All configuration files remain the same (already generic)
 - ✅ Source code in `src/` folder remains unchanged (already generic)
 
@@ -88,21 +98,25 @@ Your project has been successfully transformed from a DIFC-specific legal RAG sy
 Your RAG template is now:
 
 ### **🌍 Universal**
+
 - Works with any PDF document collection
 - No domain-specific assumptions
 - Flexible and adaptable
 
 ### **👥 User-Friendly**
+
 - Clear, general instructions
 - Professional appearance
 - Suitable for any business environment
 
 ### **🔧 Developer-Friendly**
+
 - Clean, modular code
 - Comprehensive documentation
 - Easy to customize and extend
 
 ### **📈 Professional**
+
 - Production-ready interface
 - Comprehensive error handling
 - Advanced analytics and features
@@ -111,9 +125,10 @@ Your RAG template is now:
 
 ## 🎉 **GitHub Repository Updated**
 
-**Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever)
+**Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA)
 
 ### **Latest Commit**
+
 ```
 Update: Convert from DIFC-specific to general RAG template
 - Removed all DIFC references
@@ -124,6 +139,7 @@ Update: Convert from DIFC-specific to general RAG template
 ```
 
 ### **What Users Get Now**
+
 - ✅ **Universal RAG Template** for any document type
 - ✅ **Professional Web Interface** with modern design
 - ✅ **Comprehensive Documentation** for easy setup
@@ -136,24 +152,28 @@ Update: Convert from DIFC-specific to general RAG template
 ## 🎯 **Perfect Template For**
 
 ### **Business Applications**
+
 - Corporate knowledge bases
 - Policy and procedure documents
 - Training material repositories
 - Compliance documentation systems
 
 ### **Academic & Research**
+
 - Research paper collections
 - Academic literature reviews
 - Educational content systems
 - Reference material databases
 
 ### **Technical Applications**
+
 - Software documentation
 - Technical manuals
 - API documentation
 - User guides and tutorials
 
 ### **Legal & Compliance**
+
 - Legal document analysis
 - Contract repositories
 - Regulatory compliance systems
@@ -175,4 +195,4 @@ Your template now serves as a **complete, professional foundation** that develop
 
 **🎉 Your RAG Template is now a universal, community-ready resource that can help developers worldwide build amazing document Q&A systems! 🚀**
 
-**Repository**: https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever
+**Repository**: https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA

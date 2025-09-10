@@ -71,7 +71,7 @@ A powerful **Retrieval-Augmented Generation (RAG)** template built with **NVIDIA
 ### **Step 1: Clone the Repository**
 
 ```bash
-git clone https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever.git
+git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA
 cd RAG-Template-for-NVIDIA-nemoretriever
 ```
 
@@ -414,8 +414,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 **Support**
 
-- **Issues**: [GitHub Issues](https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever/discussions)
+- **Issues**: [GitHub Issues](https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA/discussions)
 - **Documentation**: Check the `docs/` folder for additional guides
 
 ---

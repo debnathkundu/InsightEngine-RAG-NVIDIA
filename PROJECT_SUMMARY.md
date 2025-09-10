@@ -2,13 +2,14 @@
 
 ## 📍 **Repository Information**
 
-**GitHub Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever)
+**GitHub Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA)
 
-**Repository URL**: `https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever.git`
+**Repository URL**: `https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA`
 
 ## ✅ **What's Been Accomplished**
 
 ### **🏗️ Complete RAG System Built**
+
 - ✅ **NVIDIA API Integration**: Working with `nvidia/nv-embed-v1` embedding model
 - ✅ **PDF Document Processing**: Automatic loading and intelligent chunking
 - ✅ **Vector Database**: FAISS-based similarity search with persistence
@@ -17,6 +18,7 @@
 - ✅ **Advanced Analytics**: Document statistics and source visualization
 
 ### **🌐 Professional Web Interface**
+
 - ✅ **Modern Design**: Clean, professional styling
 - ✅ **Interactive Chat**: Real-time Q&A with source attribution
 - ✅ **Advanced Features**: Document analytics, chat export, search functionality
@@ -24,6 +26,7 @@
 - ✅ **Error Handling**: Comprehensive error management and user feedback
 
 ### **📚 Comprehensive Documentation**
+
 - ✅ **README.md**: Detailed setup and usage instructions
 - ✅ **SETUP_GUIDE.md**: Step-by-step installation guide
 - ✅ **WEB_INTERFACE_GUIDE.md**: Complete web interface documentation
@@ -31,6 +34,7 @@
 - ✅ **Requirements.txt**: All necessary Python dependencies
 
 ### **🔧 Developer-Friendly Features**
+
 - ✅ **Modular Code**: Well-organized source code in `src/` directory
 - ✅ **Testing Suite**: Comprehensive test scripts for all components
 - ✅ **Configuration**: Environment-based configuration management
@@ -67,18 +71,21 @@ RAG-Template-for-NVIDIA-nemoretriever/
 ## 🎯 **Key Features for Users**
 
 ### **🚀 Easy Setup**
-- **One-Command Clone**: `git clone https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever.git`
+
+- **One-Command Clone**: `git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA`
 - **Simple Installation**: `pip install -r requirements.txt`
 - **Quick Configuration**: Copy `.env.template` to `.env` and add API key
 - **Instant Launch**: `streamlit run streamlit_app.py`
 
 ### **💡 Intelligent Features**
+
 - **Smart Document Processing**: Automatic PDF loading and chunking
 - **Advanced Search**: Vector-based similarity search with FAISS
 - **Source Attribution**: Exact document and page references
 - **Real-time Analytics**: Document statistics and coverage analysis
 
 ### **🎨 Professional Interface**
+
 - **Beautiful Design**: Modern, responsive web interface
 - **Interactive Chat**: Natural conversation with AI assistant
 - **Visual Analytics**: Charts and graphs for document insights
@@ -87,18 +94,22 @@ RAG-Template-for-NVIDIA-nemoretriever/
 ## 🔑 **For New Users**
 
 ### **Getting Started**
+
 1. **Clone the repository**:
+
    ```bash
-   git clone https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever.git
+   git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA
    cd RAG-Template-for-NVIDIA-nemoretriever
    ```
 
 2. **Get NVIDIA API Key**:
+
    - Visit [build.nvidia.com](https://build.nvidia.com)
    - Create account and generate API key
    - Follow detailed instructions in README.md
 
 3. **Install and Configure**:
+
    ```bash
    pip install -r requirements.txt
    cp .env.template .env
@@ -112,6 +123,7 @@ RAG-Template-for-NVIDIA-nemoretriever/
    ```
 
 ### **What Users Get**
+
 - **Complete RAG System**: Ready-to-use document Q&A system
 - **Professional Interface**: Beautiful web application
 - **Comprehensive Documentation**: Step-by-step guides
@@ -130,6 +142,7 @@ RAG-Template-for-NVIDIA-nemoretriever/
 ## 🔮 **Future Enhancements**
 
 The template is designed to be easily extensible:
+
 - **Multimodal Support**: When NVIDIA's vision models become available
 - **Additional File Formats**: Word documents, PowerPoint, etc.
 - **Advanced Analytics**: More sophisticated document insights
@@ -138,7 +151,7 @@ The template is designed to be easily extensible:
 
 ## 📞 **Community and Support**
 
-- **GitHub Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever)
+- **GitHub Repository**: [RAG-Template-for-NVIDIA-nemoretriever](https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA)
 - **Issues**: Report bugs and request features
 - **Discussions**: Community support and ideas
 - **Documentation**: Comprehensive guides and examples
@@ -156,4 +169,4 @@ The template is designed to be easily extensible:
 
 **🏛️ Your RAG Template for NVIDIA NemoRetriever is now live on GitHub and ready for the community to use! 🚀**
 
-**Repository**: https://github.com/zainulabedeen123/RAG-Template-for-NVIDIA-nemoretriever
+**Repository**: https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA
