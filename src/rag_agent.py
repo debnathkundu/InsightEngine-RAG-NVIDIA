@@ -17,6 +17,7 @@ from langchain.llms.base import LLM
 from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
 from langchain.callbacks.manager import CallbackManagerForLLMRun
+from langchain_core.outputs import Generation, LLMResult
 
 from .document_loader import DocumentLoader
 from .nvidia_embeddings import NVIDIAEmbeddings
@@ -103,6 +104,27 @@ class NVIDIALangChainLLM(LLM):
 
     def _identifying_params(self) -> Dict[str, Any]:
         """Get the identifying parameters."""
+        return {
+            "model_name": self.model_name,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "base_url": self.base_url,
+        }
+
+    def generate(
+        self,
+        prompts: List[str],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> LLMResult:
+        """Generate multiple outputs for multiple prompts."""
+        generations = []
+        for prompt in prompts:
+            output = self._call(prompt, stop=stop, run_manager=run_manager, **kwargs)
+            generations.append([Generation(text=output)])
+        
+        return LLMResult(generations=generations)
         return {
             "model_name": self.model_name,
             "max_tokens": self.max_tokens,
@@ -430,7 +452,7 @@ Answer: """
                             self.memory.chat_memory.add_ai_message(ai_msg)
                     
                     # Use conversational retrieval chain
-                    result = self.conversational_chain({"question": question})
+                    result = self.conversational_chain.invoke({"question": question})
                     
                     answer = result["answer"]
                     source_docs = result.get("source_documents", [])
@@ -457,6 +479,9 @@ Answer: """
                     )
                     
                 except Exception as e:
+                    logger.error(f"Conversational chain detailed error: {type(e).__name__}: {str(e)}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
                     logger.warning(f"Conversational chain failed, falling back to basic chain: {str(e)}")
                     # Fall back to basic chain
                     use_conversational_chain = False
@@ -465,7 +490,8 @@ Answer: """
                 # Use basic chain for standalone questions or fallback
                 if self.basic_chain:
                     try:
-                        result = self.basic_chain({"query": question})
+                        # Use basic retrieval chain
+                        result = self.basic_chain.invoke({"query": question})
                         answer = result["result"]
                         source_docs = result.get("source_documents", [])
                         
@@ -481,6 +507,9 @@ Answer: """
                         )
                         
                     except Exception as e:
+                        logger.error(f"Basic chain detailed error: {type(e).__name__}: {str(e)}")
+                        import traceback
+                        logger.error(f"Traceback: {traceback.format_exc()}")
                         logger.warning(f"LangChain approach failed, using legacy method: {str(e)}")
 
                 # Legacy approach as final fallback
