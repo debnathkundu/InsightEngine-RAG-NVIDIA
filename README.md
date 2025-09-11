@@ -13,6 +13,7 @@ A powerful **Retrieval-Augmented Generation (RAG)** template built with **NVIDIA
 - 📄 **PDF Document Processing**: Automatic loading and intelligent chunking
 - 🔍 **Vector Search**: FAISS-based similarity search with persistence
 - 💬 **Interactive Web UI**: Beautiful Streamlit interface with chat functionality
+- 🧠 **Conversational Memory**: Remembers conversation context for natural follow-up questions
 - 📊 **Advanced Analytics**: Document statistics and source visualization
 - 🔒 **Secure**: Environment-based API key management
 - 📱 **Responsive**: Mobile-friendly design
@@ -358,6 +359,34 @@ python src/rag_agent.py
 ### **Local Development**
 
 - Use the provided scripts for local testing and development
+
+## 🎥 **Conversational Memory Demo**
+
+The system now supports **conversational memory**, allowing natural follow-up questions:
+
+```
+👤 User: "What is the main topic of the documents?"
+🤖 Assistant: "The documents primarily focus on machine learning and AI development..."
+
+👤 User: "Can you explain that in more detail?"
+🤖 Assistant: 🧠 (Using 1 previous exchange)
+           "Certainly! The machine learning concepts mentioned include..."
+
+👤 User: "What are the key benefits of this approach?"
+🤖 Assistant: 🧠 (Using 2 previous exchanges)
+           "Based on the ML approach we discussed, the key benefits are..."
+
+👤 User: "Are there any limitations?"
+🤖 Assistant: 🧠 (Using 3 previous exchanges)
+           "Yes, while this ML approach offers significant benefits, there are some limitations..."
+```
+
+**Key Features:**
+
+- 🧠 **Context Awareness**: Understands "that", "this", "it" references
+- 💭 **Memory Window**: Remembers last 10 conversation turns
+- 🔄 **Natural Flow**: No need to repeat context in follow-up questions
+- 📊 **Visual Indicators**: Shows when conversational memory is active
 
 ### **Docker Deployment**
 

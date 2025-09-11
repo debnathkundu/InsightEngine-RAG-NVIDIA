@@ -11,9 +11,12 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
 from langchain.schema import Document
-from langchain.chains import RetrievalQA
+from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from langchain.prompts import PromptTemplate
 from langchain.llms.base import LLM
+from langchain.memory import ConversationBufferWindowMemory, ConversationSummaryBufferMemory
+from langchain.schema import BaseMessage, HumanMessage, AIMessage
+from langchain.callbacks.manager import CallbackManagerForLLMRun
 
 from .document_loader import DocumentLoader
 from .nvidia_embeddings import NVIDIAEmbeddings
@@ -32,10 +35,83 @@ class RAGResponse:
     confidence_scores: Optional[List[float]] = None
     query: str = ""
     processing_time: float = 0.0
+    chat_history: Optional[List[Tuple[str, str]]] = None
+
+
+class NVIDIALangChainLLM(LLM):
+    """LangChain-compatible NVIDIA LLM wrapper for conversational memory support"""
+
+    api_key: str
+    model_name: str = "meta/llama-3.1-8b-instruct"
+    base_url: str = "https://integrate.api.nvidia.com/v1"
+    max_tokens: int = 1024
+    temperature: float = 0.1
+
+    def __init__(self, api_key: str, model_name: str = "meta/llama-3.1-8b-instruct", **kwargs):
+        # Pass all parameters to parent constructor, including api_key
+        super().__init__(
+            api_key=api_key,
+            model_name=model_name,
+            **kwargs
+        )
+
+    @property
+    def _llm_type(self) -> str:
+        """Return identifier of llm type."""
+        return "nvidia_llm"
+
+    def _call(
+        self,
+        prompt: str,
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> str:
+        """Call the NVIDIA API and return the output."""
+        import requests
+
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature
+        }
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            else:
+                logger.error(f"LLM API error: {response.status_code} - {response.text}")
+                return "I apologize, but I'm unable to generate a response at the moment."
+
+        except Exception as e:
+            logger.error(f"LLM call failed: {str(e)}")
+            return "I apologize, but I encountered an error while processing your request."
+
+    def _identifying_params(self) -> Dict[str, Any]:
+        """Get the identifying parameters."""
+        return {
+            "model_name": self.model_name,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
 
 
 class SimpleNVIDIALLM:
-    """Simple NVIDIA LLM wrapper for basic text generation"""
+    """Simple NVIDIA LLM wrapper for basic text generation (backward compatibility)"""
 
     def __init__(self, api_key: str, model_name: str = "meta/llama-3.1-8b-instruct"):
         self.api_key = api_key
@@ -79,7 +155,7 @@ class SimpleNVIDIALLM:
 
 
 class RAGAgent:
-    """Main RAG Agent that combines retrieval and generation"""
+    """Main RAG Agent that combines retrieval and generation with conversational memory"""
     
     def __init__(
         self,
@@ -87,7 +163,10 @@ class RAGAgent:
         api_key: str,
         vector_db_path: str = "./vector_db",
         chunk_size: int = 1000,
-        chunk_overlap: int = 200
+        chunk_overlap: int = 200,
+        status_callback=None,
+        enable_memory: bool = True,
+        memory_window_size: int = 10
     ):
         """
         Initialize RAG Agent
@@ -98,23 +177,50 @@ class RAGAgent:
             vector_db_path: Path for vector database storage
             chunk_size: Size of document chunks
             chunk_overlap: Overlap between chunks
+            status_callback: Optional callback for status updates
+            enable_memory: Whether to enable conversational memory
+            memory_window_size: Number of conversation turns to remember
         """
         self.docs_folder = docs_folder
         self.api_key = api_key
         self.vector_db_path = vector_db_path
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.enable_memory = enable_memory
+        self.memory_window_size = memory_window_size
         
         # Initialize components
         self.document_loader = DocumentLoader(docs_folder)
         self.embeddings = NVIDIAEmbeddings(api_key)
         self.vector_db = VectorDatabase(self.embeddings, vector_db_path)
-        self.llm = SimpleNVIDIALLM(api_key)
+        
+        # Initialize both LLM wrappers for flexibility
+        self.llm = SimpleNVIDIALLM(api_key)  # For backward compatibility
+        
+        # Try to initialize LangChain LLM wrapper with error handling
+        try:
+            self.langchain_llm = NVIDIALangChainLLM(api_key=api_key)  # For conversational chains
+            logger.info("✅ LangChain LLM wrapper initialized successfully")
+        except Exception as e:
+            logger.warning(f"Failed to initialize LangChain LLM wrapper: {str(e)}")
+            logger.warning("Falling back to basic LLM only - conversational memory will be disabled")
+            self.langchain_llm = None
+            self.enable_memory = False
+        
+        # Initialize conversational memory if enabled and LangChain LLM is available
+        self.memory = None
+        self.conversational_chain = None
+        self.basic_chain = None
+        
+        if self.enable_memory and self.langchain_llm:
+            self._initialize_memory()
+        elif self.enable_memory and not self.langchain_llm:
+            logger.warning("Conversational memory disabled due to LangChain LLM initialization failure")
         
         # File watcher (will be started after knowledge base setup)
         self.file_watcher_observer = None
 
-        # Custom prompt template
+        # Custom prompt templates
         self.prompt_template = """Use the following pieces of context to answer the question at the end.
 If you don't know the answer based on the context, just say that you don't know, don't try to make up an answer.
 
@@ -124,8 +230,101 @@ Context:
 Question: {question}
 
 Answer: """
+
+        # Conversational prompt template for follow-up questions
+        self.conversational_prompt_template = """Use the following pieces of context to answer the question at the end, considering the conversation history.
+If you don't know the answer based on the context, just say that you don't know, don't try to make up an answer.
+Be aware of previous questions and answers to provide coherent follow-up responses.
+
+Context:
+{context}
+
+Chat History:
+{chat_history}
+
+Question: {question}
+
+Answer: """
         
         logger.info("RAG Agent initialized successfully")
+    
+    def _initialize_memory(self):
+        """Initialize conversational memory and chains"""
+        try:
+            if not self.enable_memory:
+                return
+                
+            # Initialize memory with window buffer to remember last N conversations
+            self.memory = ConversationBufferWindowMemory(
+                k=self.memory_window_size,
+                memory_key="chat_history",
+                return_messages=True,
+                output_key="answer"
+            )
+            
+            # Initialize chains when vector store is ready
+            if hasattr(self.vector_db, 'vectorstore') and self.vector_db.vectorstore:
+                self._setup_chains()
+                
+            logger.info(f"✅ Conversational memory initialized (window size: {self.memory_window_size})")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize memory: {str(e)}")
+            self.enable_memory = False
+    
+    def _setup_chains(self):
+        """Setup the LangChain retrieval chains"""
+        try:
+            if not self.vector_db.vectorstore:
+                logger.warning("Vector store not available for chain setup")
+                return
+            
+            if not self.langchain_llm:
+                logger.warning("LangChain LLM not available - skipping chain setup")
+                return
+                
+            retriever = self.vector_db.vectorstore.as_retriever(
+                search_kwargs={"k": 4}
+            )
+            
+            # Setup basic retrieval chain for non-conversational queries
+            self.basic_chain = RetrievalQA.from_chain_type(
+                llm=self.langchain_llm,
+                chain_type="stuff",
+                retriever=retriever,
+                return_source_documents=True,
+                chain_type_kwargs={
+                    "prompt": PromptTemplate(
+                        template=self.prompt_template,
+                        input_variables=["context", "question"]
+                    )
+                }
+            )
+            
+            # Setup conversational retrieval chain for follow-up questions
+            if self.enable_memory and self.memory:
+                self.conversational_chain = ConversationalRetrievalChain.from_llm(
+                    llm=self.langchain_llm,
+                    retriever=retriever,
+                    memory=self.memory,
+                    return_source_documents=True,
+                    verbose=False,
+                    combine_docs_chain_kwargs={
+                        "prompt": PromptTemplate(
+                            template=self.conversational_prompt_template,
+                            input_variables=["context", "chat_history", "question"]
+                        )
+                    }
+                )
+                
+            logger.info("✅ LangChain retrieval chains initialized")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup chains: {str(e)}")
+            logger.warning("Chain setup failed - falling back to basic mode only")
+            self.basic_chain = None
+            self.conversational_chain = None
+            self.enable_memory = False
     
     def setup_knowledge_base(self, force_rebuild: bool = False) -> bool:
         """
@@ -171,6 +370,9 @@ Answer: """
             
             logger.info("✅ Knowledge base setup completed successfully!")
             
+            # Setup LangChain retrieval chains now that vector store is ready
+            self._setup_chains()
+            
             # Start file watcher for incremental updates
             self.start_file_watcher()
             
@@ -182,13 +384,14 @@ Answer: """
     
 
     
-    def ask_question(self, question: str, k: int = 4) -> RAGResponse:
+    def ask_question(self, question: str, k: int = 4, chat_history: Optional[List[Tuple[str, str]]] = None) -> RAGResponse:
         """
-        Ask a question and get an answer from the knowledge base
+        Ask a question and get an answer from the knowledge base with optional conversational memory
 
         Args:
             question: The question to ask
             k: Number of relevant documents to retrieve
+            chat_history: Optional chat history for conversational context
 
         Returns:
             RAGResponse with answer and source documents
@@ -208,41 +411,127 @@ Answer: """
 
             logger.info(f"Processing question: {question}")
 
-            # Get relevant documents
-            scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
-
-            if not scored_docs:
-                return RAGResponse(
-                    answer="I couldn't find any relevant information to answer your question.",
-                    source_documents=[],
-                    query=question,
-                    processing_time=time.time() - start_time
-                )
-
-            # Extract documents and scores
-            source_docs = [doc for doc, score in scored_docs]
-            scores = [score for doc, score in scored_docs]
-
-            # Create context from retrieved documents
-            context = "\n\n".join([doc.page_content for doc in source_docs])
-
-            # Create prompt
-            prompt = self.prompt_template.format(context=context, question=question)
-
-            # Generate answer using LLM
-            answer = self.llm.generate_response(prompt)
-
-            processing_time = time.time() - start_time
-
-            logger.info(f"Question answered in {processing_time:.2f} seconds")
-
-            return RAGResponse(
-                answer=answer,
-                source_documents=source_docs,
-                confidence_scores=scores,
-                query=question,
-                processing_time=processing_time
+            # Determine if this is a conversational follow-up or a new question
+            use_conversational_chain = (
+                self.enable_memory and 
+                self.conversational_chain and 
+                (chat_history or (self.memory and len(self.memory.chat_memory.messages) > 0))
             )
+
+            if use_conversational_chain:
+                # Use conversational chain for follow-up questions
+                try:
+                    # If external chat history is provided, update memory
+                    if chat_history and self.memory:
+                        # Clear existing memory and load from chat history
+                        self.memory.clear()
+                        for human_msg, ai_msg in chat_history[-self.memory_window_size:]:
+                            self.memory.chat_memory.add_user_message(human_msg)
+                            self.memory.chat_memory.add_ai_message(ai_msg)
+                    
+                    # Use conversational retrieval chain
+                    result = self.conversational_chain({"question": question})
+                    
+                    answer = result["answer"]
+                    source_docs = result.get("source_documents", [])
+                    
+                    # Extract chat history for response
+                    response_chat_history = []
+                    if self.memory:
+                        messages = self.memory.chat_memory.messages
+                        for i in range(0, len(messages), 2):
+                            if i + 1 < len(messages):
+                                human = messages[i].content
+                                ai = messages[i + 1].content
+                                response_chat_history.append((human, ai))
+                    
+                    processing_time = time.time() - start_time
+                    logger.info(f"Question answered using conversational chain in {processing_time:.2f} seconds")
+
+                    return RAGResponse(
+                        answer=answer,
+                        source_documents=source_docs,
+                        query=question,
+                        processing_time=processing_time,
+                        chat_history=response_chat_history
+                    )
+                    
+                except Exception as e:
+                    logger.warning(f"Conversational chain failed, falling back to basic chain: {str(e)}")
+                    # Fall back to basic chain
+                    use_conversational_chain = False
+
+            if not use_conversational_chain:
+                # Use basic chain for standalone questions or fallback
+                if self.basic_chain:
+                    try:
+                        result = self.basic_chain({"query": question})
+                        answer = result["result"]
+                        source_docs = result.get("source_documents", [])
+                        
+                        processing_time = time.time() - start_time
+                        logger.info(f"Question answered using basic chain in {processing_time:.2f} seconds")
+
+                        return RAGResponse(
+                            answer=answer,
+                            source_documents=source_docs,
+                            query=question,
+                            processing_time=processing_time,
+                            chat_history=chat_history
+                        )
+                        
+                    except Exception as e:
+                        logger.warning(f"LangChain approach failed, using legacy method: {str(e)}")
+
+                # Legacy approach as final fallback
+                # Get relevant documents
+                scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
+
+                if not scored_docs:
+                    return RAGResponse(
+                        answer="I couldn't find any relevant information to answer your question.",
+                        source_documents=[],
+                        query=question,
+                        processing_time=time.time() - start_time,
+                        chat_history=chat_history
+                    )
+
+                # Extract documents and scores
+                source_docs = [doc for doc, score in scored_docs]
+                scores = [score for doc, score in scored_docs]
+
+                # Create context from retrieved documents
+                context = "\n\n".join([doc.page_content for doc in source_docs])
+
+                # Create prompt with chat history if available
+                if chat_history:
+                    # Format chat history for context
+                    formatted_history = "\n".join([
+                        f"Human: {h}\nAssistant: {a}" 
+                        for h, a in chat_history[-3:]  # Use last 3 exchanges for context
+                    ])
+                    prompt = self.conversational_prompt_template.format(
+                        context=context, 
+                        chat_history=formatted_history,
+                        question=question
+                    )
+                else:
+                    prompt = self.prompt_template.format(context=context, question=question)
+
+                # Generate answer using LLM
+                answer = self.llm.generate_response(prompt)
+
+                processing_time = time.time() - start_time
+                logger.info(f"Question answered using legacy approach in {processing_time:.2f} seconds")
+
+                return RAGResponse(
+                    answer=answer,
+                    source_documents=source_docs,
+                    confidence_scores=scores,
+                    query=question,
+                    processing_time=processing_time,
+                    chat_history=chat_history
+                )
 
         except Exception as e:
             logger.error(f"Failed to answer question: {str(e)}")
@@ -250,7 +539,8 @@ Answer: """
                 answer=f"I encountered an error while processing your question: {str(e)}",
                 source_documents=[],
                 query=question,
-                processing_time=time.time() - start_time
+                processing_time=time.time() - start_time,
+                chat_history=chat_history
             )
     
     def get_relevant_documents(self, query: str, k: int = 4) -> List[Tuple[Document, float]]:
@@ -288,6 +578,62 @@ Answer: """
             pass
         
         return vector_stats
+    
+    def clear_conversation_memory(self):
+        """Clear the conversation memory"""
+        try:
+            if self.memory:
+                self.memory.clear()
+                logger.info("✅ Conversation memory cleared")
+        except Exception as e:
+            logger.error(f"Failed to clear conversation memory: {str(e)}")
+    
+    def get_conversation_history(self) -> List[Tuple[str, str]]:
+        """
+        Get the current conversation history
+        
+        Returns:
+            List of (human_message, ai_message) tuples
+        """
+        history = []
+        try:
+            if self.memory and self.memory.chat_memory:
+                messages = self.memory.chat_memory.messages
+                for i in range(0, len(messages), 2):
+                    if i + 1 < len(messages):
+                        human = messages[i].content
+                        ai = messages[i + 1].content
+                        history.append((human, ai))
+        except Exception as e:
+            logger.error(f"Failed to get conversation history: {str(e)}")
+        
+        return history
+    
+    def set_conversation_history(self, chat_history: List[Tuple[str, str]]):
+        """
+        Set the conversation history manually
+        
+        Args:
+            chat_history: List of (human_message, ai_message) tuples
+        """
+        try:
+            if self.memory:
+                self.memory.clear()
+                for human_msg, ai_msg in chat_history[-self.memory_window_size:]:
+                    self.memory.chat_memory.add_user_message(human_msg)
+                    self.memory.chat_memory.add_ai_message(ai_msg)
+                logger.info(f"✅ Conversation history set with {len(chat_history)} exchanges")
+        except Exception as e:
+            logger.error(f"Failed to set conversation history: {str(e)}")
+    
+    def is_conversational_mode_enabled(self) -> bool:
+        """Check if conversational mode is enabled and working"""
+        return (
+            self.enable_memory and 
+            self.memory is not None and 
+            self.conversational_chain is not None and
+            self.langchain_llm is not None
+        )
     
     def add_documents_to_knowledge_base(self, new_docs_folder: Optional[str] = None) -> bool:
         """

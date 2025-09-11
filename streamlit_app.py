@@ -480,11 +480,19 @@ def display_sidebar(rag_agent):
         if nvidia_status.get("status") == "online":
             st.sidebar.success("🟢 NVIDIA API Connected")
             if "embedding_dimension" in nvidia_status:
-                st.sidebar.info(f"📊 Embedding Dimension: {nvidia_status['embedding_dimension']}")
+                st.sidebar.info(
+                    f"**Embedding**: nvidia/nv-embed-v1\n"
+                    f"**Dimension**: {nvidia_status['embedding_dimension']}\n\n"
+                    f"**LLM**: meta/llama-3.1-8b-instruct"
+                )
         else:
             st.sidebar.error("🔴 NVIDIA API Offline")
             if "error" in nvidia_status:
                 st.sidebar.error(f"Error: {nvidia_status['error'][:50]}...")
+        
+        # Model information
+        # st.sidebar.markdown("### 🤖 AI Models")
+        # st.sidebar.info("**Embedding**: nvidia/nv-embed-v1\n**LLM**: meta/llama-3.1-8b-instruct")
         
         # Vector database & Documents folder status
         vector_status = components.get("vector_database", {})
@@ -516,10 +524,6 @@ def display_sidebar(rag_agent):
             st.sidebar.info("🔄 Auto-updates enabled")
         else:
             st.sidebar.warning("🟡 File Watcher Inactive")
-        
-        # Model information
-        st.sidebar.markdown("### 🤖 AI Models")
-        st.sidebar.info("**Embedding**: nvidia/nv-embed-v1\n**LLM**: meta/llama-3.1-8b-instruct")
         
         # System actions
         st.sidebar.markdown("### ⚙️ System Actions")
@@ -591,6 +595,57 @@ def display_sidebar(rag_agent):
                 # Add system notification
                 add_system_notification("system", f"Health check completed - Status: {overall_status.title()}")
                 st.json(health)
+        
+        # Conversational Memory Controls
+        st.sidebar.markdown("### 🧠 Conversational Memory")
+        if hasattr(rag_agent, 'is_conversational_mode_enabled') and rag_agent.is_conversational_mode_enabled():
+            st.sidebar.success("🟢 Memory Active")
+            
+            # Show conversation history info
+            if hasattr(rag_agent, 'get_conversation_history'):
+                try:
+                    conv_history = rag_agent.get_conversation_history()
+                    if conv_history:
+                        st.sidebar.info(f"💭 Remembering {len(conv_history)} conversation exchanges")
+                    else:
+                        st.sidebar.info("💭 No conversation history yet")
+                except:
+                    pass
+            
+            # Memory controls
+            memory_col1, memory_col2 = st.sidebar.columns(2)
+            with memory_col1:
+                if st.button("🗑️ Clear Memory", help="Clear conversation memory"):
+                    if hasattr(rag_agent, 'clear_conversation_memory'):
+                        rag_agent.clear_conversation_memory()
+                        st.success("✅ Memory cleared!")
+                        
+                        # Add notification to chat
+                        if "messages" not in st.session_state:
+                            st.session_state.messages = []
+                        
+                        timestamp = datetime.now()
+                        time_str = timestamp.strftime("%H:%M:%S")
+                        chat_message = f"**🧠 Conversation Memory Cleared [{time_str}]**\n\n"
+                        chat_message += f"**Status**: MEMORY CLEARED\n"
+                        chat_message += f"**Details**: All conversation history has been cleared. Future questions will be treated as new conversations."
+                        
+                        st.session_state.messages.append({
+                            "role": "system",
+                            "content": chat_message,
+                            "timestamp": timestamp,
+                            "type": "memory_update",
+                            "status_type": "memory_cleared"
+                        })
+                        st.rerun()
+            
+            with memory_col2:
+                # Show memory window size
+                if hasattr(rag_agent, 'memory_window_size'):
+                    st.sidebar.info(f"📝 Window: {rag_agent.memory_window_size} turns")
+        else:
+            st.sidebar.warning("🟡 Memory Disabled")
+            st.sidebar.info("💡 Basic mode - questions handled independently")
         
         # Document types supported
         st.sidebar.markdown("### 📖 Supported Documents")
@@ -709,10 +764,15 @@ def display_chat_interface(rag_agent):
                 """, unsafe_allow_html=True)
             else:
                 # Assistant messages
+                conversational_indicator = ""
+                if message.get("conversational"):
+                    history_count = message.get("chat_history_used", 0)
+                    conversational_indicator = f" 🧠 (Using {history_count} previous exchanges)"
+                
                 st.markdown(f"""
                 <div class="chat-message assistant-message">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <strong>🤖 AI Assistant</strong>
+                        <strong>🤖 AI Assistant{conversational_indicator}</strong>
                         <small style="color: #666;">{time_str}</small>
                     </div>
                     {message["content"]}
@@ -725,6 +785,14 @@ def display_chat_interface(rag_agent):
 
     # Chat input at the bottom
     st.markdown("---")
+    
+    # Add conversational memory status indicator if available
+    if rag_agent and hasattr(rag_agent, 'is_conversational_mode_enabled'):
+        if rag_agent.is_conversational_mode_enabled():
+            st.info("🧠 **Conversational Memory Active** - I can remember our previous conversation and answer follow-up questions!")
+        else:
+            st.warning("📝 **Basic Mode** - Each question is handled independently")
+    
     if prompt := st.chat_input("Ask a question about your documents..."):
         # Add user message with timestamp
         user_message = {
@@ -737,9 +805,34 @@ def display_chat_interface(rag_agent):
         
         if rag_agent:
             try:
-                # Get response from RAG agent
+                # Extract chat history for conversational context
+                chat_history = []
+                if hasattr(rag_agent, 'is_conversational_mode_enabled') and rag_agent.is_conversational_mode_enabled():
+                    # Extract only user-assistant conversation pairs for context
+                    user_messages = []
+                    assistant_messages = []
+                    
+                    for msg in st.session_state.messages:
+                        if msg["role"] == "user" and msg.get("type") == "chat":
+                            user_messages.append(msg["content"])
+                        elif msg["role"] == "assistant" and msg.get("type") == "chat" and msg.get("content"):
+                            assistant_messages.append(msg["content"])
+                    
+                    # Pair up the messages (excluding the current question)
+                    min_len = min(len(user_messages) - 1, len(assistant_messages))  # -1 to exclude current question
+                    chat_history = [(user_messages[i], assistant_messages[i]) for i in range(min_len)]
+                
+                # Get response from RAG agent with chat history
                 with st.spinner("🔍 Searching documents..."):
-                    response = rag_agent.ask_question(prompt)
+                    if chat_history and hasattr(rag_agent, 'ask_question'):
+                        # Try to call the enhanced ask_question method with chat history
+                        try:
+                            response = rag_agent.ask_question(prompt, chat_history=chat_history)
+                        except TypeError:
+                            # Fallback to basic method if chat_history parameter not supported
+                            response = rag_agent.ask_question(prompt)
+                    else:
+                        response = rag_agent.ask_question(prompt)
 
                 # Validate response
                 if not response or not response.answer:
@@ -753,14 +846,16 @@ def display_chat_interface(rag_agent):
                     }
                     st.session_state.messages.append(error_message)
                 else:
-                    # Add assistant response with timestamp
+                    # Add assistant response with timestamp and conversational context
                     assistant_message = {
                         "role": "assistant",
                         "content": response.answer,
                         "sources": response.source_documents,
                         "processing_time": response.processing_time,
                         "timestamp": datetime.now(),
-                        "type": "chat"
+                        "type": "chat",
+                        "conversational": bool(chat_history),  # Mark if this was a conversational response
+                        "chat_history_used": len(chat_history) if chat_history else 0
                     }
                     st.session_state.messages.append(assistant_message)
 
@@ -1236,17 +1331,36 @@ def main():
             display_chat_interface(rag_agent)
     
     with col2:
-        # # Quick actions and tips
-        # st.markdown("### 💡 Quick Tips")
-        # st.info("""
-        # **Sample Questions:**
-        # • What is the main topic of the documents?
-        # • Summarize the key points
-        # • What are the requirements mentioned?
-        # • How does [concept A] relate to [concept B]?
-        # • What are the benefits described?
-        # • Explain the process for [specific topic]
-        # """)
+        # Quick actions and tips with conversational examples
+        st.markdown("### 💡 Quick Tips")
+        
+        # Check if conversational mode is available
+        if rag_agent and hasattr(rag_agent, 'is_conversational_mode_enabled') and rag_agent.is_conversational_mode_enabled():
+            st.success("🧠 **Conversational Mode Active!**")
+            st.info("""
+            **Try these conversational sequences:**
+            
+            **First ask:** "What is the main topic of the documents?"
+            **Then follow up:** "Can you explain that in more detail?"
+            **Or ask:** "What are the key benefits of this?"
+            
+            **Other follow-up examples:**
+            • "What else should I know about this?"
+            • "Are there any requirements mentioned?"
+            • "How does this compare to [other topic]?"
+            • "Can you give me more examples?"
+            • "What are the implications of this?"
+            """)
+        else:
+            st.info("""
+            **Sample Questions:**
+            • What is the main topic of the documents?
+            • Summarize the key points
+            • What are the requirements mentioned?
+            • How does [concept A] relate to [concept B]?
+            • What are the benefits described?
+            • Explain the process for [specific topic]
+            """)
 
         # Advanced features
         st.markdown("### 🛠️ Actions")
