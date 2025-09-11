@@ -6,9 +6,11 @@ Combines document retrieval with question answering using NVIDIA models
 import os
 import time
 import logging
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 
 from langchain.schema import Document
 from langchain.chains import RetrievalQA, ConversationalRetrievalChain
@@ -37,6 +39,76 @@ class RAGResponse:
     query: str = ""
     processing_time: float = 0.0
     chat_history: Optional[List[Tuple[str, str]]] = None
+    message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    feedback: Optional[str] = None  # "like", "dislike", None
+    feedback_timestamp: Optional[datetime] = None
+
+
+class FeedbackAnalytics:
+    """Class to handle feedback analytics and reporting"""
+    
+    @staticmethod
+    def get_feedback_summary(messages: List[Dict]) -> Dict[str, Any]:
+        """
+        Get comprehensive feedback summary from chat messages
+        
+        Args:
+            messages: List of chat messages with potential feedback
+            
+        Returns:
+            Dictionary with feedback analytics
+        """
+        assistant_messages = [msg for msg in messages if msg.get("role") == "assistant"]
+        total_responses = len(assistant_messages)
+        
+        if total_responses == 0:
+            return {
+                "total_responses": 0,
+                "feedback_received": 0,
+                "feedback_rate": "0%",
+                "liked_responses": 0,
+                "disliked_responses": 0,
+                "satisfaction_score": "N/A",
+                "detailed_feedback": []
+            }
+        
+        liked_responses = sum(1 for msg in assistant_messages if msg.get("feedback") == "like")
+        disliked_responses = sum(1 for msg in assistant_messages if msg.get("feedback") == "dislike")
+        feedback_received = liked_responses + disliked_responses
+        
+        feedback_rate = round((feedback_received / total_responses) * 100, 1) if total_responses > 0 else 0
+        satisfaction_score = round((liked_responses / feedback_received) * 100, 1) if feedback_received > 0 else "N/A"
+        
+        # Detailed feedback for export
+        detailed_feedback = []
+        for msg in assistant_messages:
+            if msg.get("feedback"):
+                detailed_feedback.append({
+                    "message_id": msg.get("message_id", "unknown"),
+                    "question": msg.get("question", ""),
+                    "answer_preview": msg.get("content", "")[:100] + "...",
+                    "feedback": msg.get("feedback"),
+                    "feedback_timestamp": msg.get("feedback_timestamp"),
+                    "processing_time": msg.get("processing_time", 0)
+                })
+        
+        return {
+            "total_responses": total_responses,
+            "feedback_received": feedback_received,
+            "feedback_rate": f"{feedback_rate}%",
+            "liked_responses": liked_responses,
+            "disliked_responses": disliked_responses,
+            "satisfaction_score": f"{satisfaction_score}%" if satisfaction_score != "N/A" else "N/A",
+            "detailed_feedback": detailed_feedback,
+            "trends": {
+                "most_recent_feedback": detailed_feedback[-5:] if detailed_feedback else [],
+                "feedback_distribution": {
+                    "positive": liked_responses,
+                    "negative": disliked_responses,
+                    "no_feedback": total_responses - feedback_received
+                }
+            }
+        }
 
 
 class NVIDIALangChainLLM(LLM):

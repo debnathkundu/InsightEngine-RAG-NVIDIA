@@ -1,0 +1,120 @@
+{
+  "export_metadata": {
+    "export_timestamp": "2025-09-11T15:30:00.123456",
+    "total_messages": 6,
+    "session_start": "2025-09-11T15:15:00.000000"
+  },
+  "feedback_analytics": {
+    "total_responses": 3,
+    "feedback_received": 2,
+    "feedback_rate": "66.7%",
+    "liked_responses": 1,
+    "disliked_responses": 1,
+    "satisfaction_score": "50.0%",
+    "detailed_feedback": [
+      {
+        "message_id": "msg_001",
+        "question": "What is machine learning?",
+        "answer_preview": "Machine learning is a subset of artificial intelligence that enables computers to learn...",
+        "feedback": "like",
+        "feedback_timestamp": "2025-09-11T15:16:30.000000",
+        "processing_time": 2.3
+      },
+      {
+        "message_id": "msg_002",
+        "question": "How does neural networks work?",
+        "answer_preview": "Neural networks are computing systems inspired by biological neural networks...",
+        "feedback": "dislike",
+        "feedback_timestamp": "2025-09-11T15:18:45.000000",
+        "processing_time": 1.8
+      }
+    ],
+    "trends": {
+      "most_recent_feedback": [
+        {
+          "message_id": "msg_002",
+          "question": "How does neural networks work?",
+          "answer_preview": "Neural networks are computing systems inspired by biological neural networks...",
+          "feedback": "dislike",
+          "feedback_timestamp": "2025-09-11T15:18:45.000000",
+          "processing_time": 1.8
+        },
+        {
+          "message_id": "msg_001",
+          "question": "What is machine learning?",
+          "answer_preview": "Machine learning is a subset of artificial intelligence that enables computers to learn...",
+          "feedback": "like",
+          "feedback_timestamp": "2025-09-11T15:16:30.000000",
+          "processing_time": 2.3
+        }
+      ],
+      "feedback_distribution": {
+        "positive": 1,
+        "negative": 1,
+        "no_feedback": 1
+      }
+    }
+  },
+  "messages": [
+    {
+      "timestamp": "2025-09-11T15:15:30.000000",
+      "role": "user",
+      "content": "What is machine learning?",
+      "sources_count": 0,
+      "processing_time": 0
+    },
+    {
+      "timestamp": "2025-09-11T15:16:00.000000",
+      "role": "assistant",
+      "content": "Machine learning is a subset of artificial intelligence that enables computers to learn and make decisions from data without being explicitly programmed. It involves algorithms that can identify patterns, make predictions, and improve their performance over time through experience.",
+      "sources_count": 3,
+      "processing_time": 2.3,
+      "message_id": "msg_001",
+      "question": "What is machine learning?",
+      "feedback": "like",
+      "feedback_timestamp": "2025-09-11T15:16:30.000000",
+      "conversational": false,
+      "chat_history_used": 0
+    },
+    {
+      "timestamp": "2025-09-11T15:17:00.000000",
+      "role": "user",
+      "content": "How does neural networks work?",
+      "sources_count": 0,
+      "processing_time": 0
+    },
+    {
+      "timestamp": "2025-09-11T15:18:00.000000",
+      "role": "assistant",
+      "content": "Neural networks are computing systems inspired by biological neural networks. They consist of interconnected nodes (neurons) that process information through weighted connections. Data flows through layers, and the network learns by adjusting these weights based on training examples.",
+      "sources_count": 2,
+      "processing_time": 1.8,
+      "message_id": "msg_002",
+      "question": "How does neural networks work?",
+      "feedback": "dislike",
+      "feedback_timestamp": "2025-09-11T15:18:45.000000",
+      "conversational": true,
+      "chat_history_used": 1
+    },
+    {
+      "timestamp": "2025-09-11T15:19:00.000000",
+      "role": "user",
+      "content": "What about deep learning?",
+      "sources_count": 0,
+      "processing_time": 0
+    },
+    {
+      "timestamp": "2025-09-11T15:19:30.000000",
+      "role": "assistant",
+      "content": "Deep learning is a subset of machine learning that uses neural networks with multiple hidden layers (hence 'deep'). These deep networks can automatically learn hierarchical representations of data, making them particularly effective for complex tasks like image recognition, natural language processing, and speech recognition.",
+      "sources_count": 4,
+      "processing_time": 2.1,
+      "message_id": "msg_003",
+      "question": "What about deep learning?",
+      "feedback": null,
+      "feedback_timestamp": null,
+      "conversational": true,
+      "chat_history_used": 2
+    }
+  ]
+}

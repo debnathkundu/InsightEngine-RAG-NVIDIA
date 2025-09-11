@@ -7,6 +7,8 @@ import streamlit as st
 import sys
 import os
 import time
+import json
+import uuid
 from pathlib import Path
 from datetime import datetime
 import plotly.express as px
@@ -17,9 +19,62 @@ from typing import Optional
 # Add project root to path, not the src folder
 sys.path.append(str(Path(__file__).parent))
 
-from src.rag_agent import RAGAgent
+from src.rag_agent import RAGAgent, FeedbackAnalytics
 from src.file_watcher import start_file_watcher, get_pending_notifications
 from src.nvidia_embeddings import NVIDIAEmbeddings
+
+def handle_feedback(message_id: str, feedback_type: str):
+    """Handle user feedback on a message"""
+    if "messages" not in st.session_state:
+        return
+    
+    # Find and update the message with feedback
+    for message in st.session_state.messages:
+        if message.get("message_id") == message_id and message.get("role") == "assistant":
+            message["feedback"] = feedback_type
+            message["feedback_timestamp"] = datetime.now().isoformat()
+            
+            # Store the feedback confirmation to show after rerun
+            st.session_state[f"feedback_confirmed_{message_id}"] = feedback_type
+            
+            # Trigger rerun to update UI
+            st.rerun()
+            break
+
+def render_feedback_buttons(message_id: str, current_feedback: Optional[str] = None):
+    """Render feedback buttons for a message"""
+    # Check if feedback was just confirmed
+    feedback_confirmed = st.session_state.get(f"feedback_confirmed_{message_id}")
+    if feedback_confirmed:
+        # Show confirmation message
+        if feedback_confirmed == "like":
+            st.success("👍 Thank you for the positive feedback!", icon="✅")
+        else:
+            st.info("👎 Thank you for the feedback. We'll use this to improve!", icon="💡")
+        # Clear the confirmation
+        del st.session_state[f"feedback_confirmed_{message_id}"]
+    
+    col1, col2, col3 = st.columns([0.1, 0.1, 0.8])
+    
+    with col1:
+        # Like button
+        like_style = "🟢👍" if current_feedback == "like" else "👍"
+        if st.button(like_style, key=f"like_{message_id}", help="Like this response"):
+            handle_feedback(message_id, "like")
+    
+    with col2:
+        # Dislike button  
+        dislike_style = "🔴👎" if current_feedback == "dislike" else "👎"
+        if st.button(dislike_style, key=f"dislike_{message_id}", help="Dislike this response"):
+            handle_feedback(message_id, "dislike")
+    
+    with col3:
+        # Show feedback status
+        if current_feedback:
+            feedback_text = "Liked ✅" if current_feedback == "like" else "Disliked ❌"
+            st.caption(f"Feedback: {feedback_text}")
+        else:
+            st.caption("👆 Rate this response")
 
 def add_system_notification(notification_type: str, filename: str = "", details: dict = None):
     """Add a system notification to the session state"""
@@ -447,6 +502,140 @@ def display_header():
     </div>
     """, unsafe_allow_html=True)
 
+def display_feedback_analysis():
+    """Display comprehensive feedback analysis"""
+    st.header("📝 Feedback Analysis Dashboard")
+    
+    if "messages" not in st.session_state or not st.session_state.messages:
+        st.info("💬 No chat messages yet. Start a conversation to see feedback analytics!")
+        return
+    
+    # Get feedback summary using FeedbackAnalytics
+    feedback_summary = FeedbackAnalytics.get_feedback_summary(st.session_state.messages)
+    
+    # Overview metrics
+    st.markdown("### 📊 Feedback Overview")
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            "Total Responses", 
+            feedback_summary["total_responses"],
+            help="Total number of AI responses provided"
+        )
+    
+    with col2:
+        st.metric(
+            "Feedback Received", 
+            feedback_summary["feedback_received"],
+            help="Number of responses that received user feedback"
+        )
+    
+    with col3:
+        st.metric(
+            "Feedback Rate", 
+            feedback_summary["feedback_rate"],
+            help="Percentage of responses that received feedback"
+        )
+    
+    with col4:
+        st.metric(
+            "Satisfaction Score", 
+            feedback_summary["satisfaction_score"],
+            help="Percentage of positive feedback (likes/(likes+dislikes))"
+        )
+    
+    # Feedback distribution chart
+    if feedback_summary["feedback_received"] > 0:
+        st.markdown("### 📈 Feedback Distribution")
+        
+        # Create pie chart for feedback distribution
+        feedback_data = feedback_summary["trends"]["feedback_distribution"]
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=['👍 Positive', '👎 Negative', '⚪ No Feedback'],
+            values=[feedback_data["positive"], feedback_data["negative"], feedback_data["no_feedback"]],
+            hole=.3,
+            marker_colors=['#2E8B57', '#DC143C', '#D3D3D3']
+        )])
+        
+        fig.update_layout(
+            title="User Feedback Distribution",
+            showlegend=True,
+            height=400
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed feedback breakdown
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 👍 Positive Feedback")
+            st.success(f"**{feedback_summary['liked_responses']}** responses received positive feedback")
+            if feedback_summary["liked_responses"] > 0:
+                positive_rate = (feedback_summary["liked_responses"] / feedback_summary["total_responses"]) * 100
+                st.write(f"**{positive_rate:.1f}%** of all responses were liked")
+        
+        with col2:
+            st.markdown("### 👎 Negative Feedback")
+            st.error(f"**{feedback_summary['disliked_responses']}** responses received negative feedback")
+            if feedback_summary["disliked_responses"] > 0:
+                negative_rate = (feedback_summary["disliked_responses"] / feedback_summary["total_responses"]) * 100
+                st.write(f"**{negative_rate:.1f}%** of all responses were disliked")
+        
+        # Recent feedback timeline
+        if feedback_summary["detailed_feedback"]:
+            st.markdown("### 🕒 Recent Feedback Timeline")
+            
+            recent_feedback = feedback_summary["trends"]["most_recent_feedback"]
+            if recent_feedback:
+                for i, item in enumerate(reversed(recent_feedback)):  # Show most recent first
+                    feedback_icon = "👍" if item["feedback"] == "like" else "👎"
+                    feedback_color = "green" if item["feedback"] == "like" else "red"
+                    
+                    with st.expander(f"{feedback_icon} Feedback #{len(recent_feedback)-i} - {item['feedback'].title()}", expanded=False):
+                        st.write(f"**Question:** {item['question']}")
+                        st.write(f"**Answer Preview:** {item['answer_preview']}")
+                        st.write(f"**Processing Time:** {item['processing_time']:.2f}s")
+                        if item.get('feedback_timestamp'):
+                            st.write(f"**Feedback Given:** {item['feedback_timestamp']}")
+            else:
+                st.info("No recent feedback to display.")
+        
+        # Export feedback data
+        st.markdown("### 📤 Export Feedback Data")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📊 Download Feedback Summary"):
+                feedback_json = json.dumps(feedback_summary, indent=2, default=str)
+                st.download_button(
+                    label="💾 Download JSON",
+                    data=feedback_json,
+                    file_name=f"feedback_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json"
+                )
+        
+        with col2:
+            if st.button("📋 View Raw Feedback Data"):
+                with st.expander("Raw Feedback Data", expanded=True):
+                    st.json(feedback_summary)
+    
+    else:
+        st.info("🎯 **No feedback received yet!**")
+        st.markdown("""
+        **To get started with feedback analysis:**
+        1. 💬 Ask questions in the Chat Assistant tab
+        2. 👍👎 Use the feedback buttons on AI responses
+        3. 📊 Return here to see your feedback analytics
+        
+        **Tips for better feedback:**
+        - Give feedback on responses you find particularly helpful or unhelpful
+        - Use feedback to help improve the AI's performance
+        - Check back regularly to see trends in response quality
+        """)
+
 def display_sidebar(rag_agent):
     """Display the sidebar with system information"""
     st.sidebar.markdown("## 📊 System Status")
@@ -789,6 +978,12 @@ def display_chat_interface(rag_agent):
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # Add feedback buttons for assistant messages
+                if message.get("type") == "chat":  # Only for actual chat responses, not system messages
+                    message_id = message.get("message_id", f"msg_{message_idx}")
+                    current_feedback = message.get("feedback")
+                    render_feedback_buttons(message_id, current_feedback)
+                
                 # Display sources if available
                 if message.get("sources"):
                     display_sources(message["sources"], message.get("processing_time", 0), message_idx=message_idx)
@@ -876,7 +1071,11 @@ def display_chat_interface(rag_agent):
                         "timestamp": datetime.now(),
                         "type": "chat",
                         "conversational": bool(chat_history),  # Mark if this was a conversational response
-                        "chat_history_used": len(chat_history) if chat_history else 0
+                        "chat_history_used": len(chat_history) if chat_history else 0,
+                        "message_id": response.message_id,  # Add unique message ID for feedback
+                        "question": prompt,  # Store the original question for feedback analysis
+                        "feedback": None,  # Initialize feedback as None
+                        "feedback_timestamp": None  # Initialize feedback timestamp
                     }
                     st.session_state.messages.append(assistant_message)
 
@@ -1341,7 +1540,7 @@ def main():
     display_sidebar(rag_agent)
 
     # Create tabs for different views
-    tab1, tab2 = st.tabs(["💬 Chat Assistant", "📊 Document Statistics"])
+    tab1, tab2, tab3 = st.tabs(["💬 Chat Assistant", "📊 Document Statistics", "📝 Feedback Analysis"])
 
     with tab1:
         # Main content area
@@ -1390,19 +1589,44 @@ def main():
         if st.button("📥 Export Chat History"):
             if st.session_state.messages:
                 chat_export = []
+                feedback_summary = FeedbackAnalytics.get_feedback_summary(st.session_state.messages)
+                
                 for msg in st.session_state.messages:
-                    chat_export.append({
-                        "timestamp": datetime.now().isoformat(),
+                    export_item = {
+                        "timestamp": msg.get("timestamp", datetime.now()).isoformat() if hasattr(msg.get("timestamp", datetime.now()), 'isoformat') else str(msg.get("timestamp", datetime.now())),
                         "role": msg["role"],
                         "content": msg["content"],
                         "sources_count": len(msg.get("sources", [])),
                         "processing_time": msg.get("processing_time", 0)
-                    })
+                    }
+                    
+                    # Add feedback-related fields for assistant messages
+                    if msg["role"] == "assistant" and msg.get("type") == "chat":
+                        export_item.update({
+                            "message_id": msg.get("message_id", ""),
+                            "question": msg.get("question", ""),
+                            "feedback": msg.get("feedback"),
+                            "feedback_timestamp": msg.get("feedback_timestamp"),
+                            "conversational": msg.get("conversational", False),
+                            "chat_history_used": msg.get("chat_history_used", 0)
+                        })
+                    
+                    chat_export.append(export_item)
 
-                import json
-                export_data = json.dumps(chat_export, indent=2)
+                # Create comprehensive export with session summary
+                comprehensive_export = {
+                    "export_metadata": {
+                        "export_timestamp": datetime.now().isoformat(),
+                        "total_messages": len(st.session_state.messages),
+                        "session_start": st.session_state.messages[0].get("timestamp", datetime.now()).isoformat() if st.session_state.messages else None
+                    },
+                    "feedback_analytics": feedback_summary,
+                    "messages": chat_export
+                }
+
+                export_data = json.dumps(comprehensive_export, indent=2, default=str)
                 st.download_button(
-                    label="💾 Download Chat History",
+                    label="💾 Download Chat History (with Feedback)",
                     data=export_data,
                     file_name=f"RAG_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
                     mime="application/json"
@@ -1466,6 +1690,10 @@ def main():
     with tab2:
         # Document statistics page
         display_document_stats(rag_agent)
+    
+    with tab3:
+        # Feedback analysis page
+        display_feedback_analysis()
 
 if __name__ == "__main__":
     main()
