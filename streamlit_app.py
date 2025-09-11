@@ -22,6 +22,7 @@ sys.path.append(str(Path(__file__).parent))
 from src.rag_agent import RAGAgent, FeedbackAnalytics
 from src.file_watcher import start_file_watcher, get_pending_notifications
 from src.nvidia_embeddings import NVIDIAEmbeddings
+from src.web_importer import WebImporter
 
 def handle_feedback(message_id: str, feedback_type: str):
     """Handle user feedback on a message"""
@@ -1540,7 +1541,7 @@ def main():
     display_sidebar(rag_agent)
 
     # Create tabs for different views
-    tab1, tab2, tab3 = st.tabs(["💬 Chat Assistant", "📊 Document Statistics", "📝 Feedback Analysis"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Chat Assistant", "📊 Document Statistics", "📝 Feedback Analysis", "🌐 Web Import"])
 
     with tab1:
         # Main content area
@@ -1694,6 +1695,201 @@ def main():
     with tab3:
         # Feedback analysis page
         display_feedback_analysis()
+    
+    with tab4:
+        # Web Import page
+        display_web_import()
+
+def display_web_import():
+    """Display the Web Import interface for downloading files from URLs"""
+    st.header("🌐 Web Import")
+    st.markdown("Import documents directly from web URLs into your knowledge base")
+    
+    # Initialize web importer - use same folder as RAG system
+    docs_folder = os.getenv("DOCS_FOLDER", "Data/Docs")
+    data_folder = Path(docs_folder)
+    web_importer = WebImporter(data_folder)
+    
+    # Show download location info
+    st.info(f"📁 **Download Location:** Files will be saved to `{docs_folder}/` and automatically processed by the RAG system")
+    
+    # Single URL import section
+    st.subheader("📄 Single URL Import")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        url_input = st.text_input(
+            "Enter URL:", 
+            placeholder="https://example.com/document.pdf",
+            help="Supported formats: PDF, DOCX, PPTX, TXT, images (JPG, PNG, etc.)"
+        )
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
+        if st.button("📥 Import File", type="primary", disabled=not url_input.strip()):
+            if url_input.strip():
+                # Progress bar and status
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    # Import the file
+                    with st.spinner("Downloading and importing file..."):
+                        success, message, import_record = web_importer.download_from_url(url_input.strip())
+                    
+                    if success:
+                        progress_bar.progress(1.0)
+                        status_text.success(f"✅ Successfully imported: {import_record.filename}")
+                        st.balloons()
+                        
+                        # Show file details
+                        size_mb = import_record.file_size / (1024 * 1024) if import_record.file_size else 0
+                        st.info(f"**Saved to:** {import_record.local_path}\n**File size:** {size_mb:.2f} MB")
+                        
+                        # Clear input after successful import
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        progress_bar.progress(0)
+                        status_text.error(f"❌ Import failed: {message}")
+                        
+                except Exception as e:
+                    progress_bar.progress(0)
+                    status_text.error(f"❌ Unexpected error: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Batch import section
+    st.subheader("📚 Batch URL Import")
+    st.markdown("Import multiple files at once by providing URLs (one per line)")
+    
+    # Text area for multiple URLs
+    urls_text = st.text_area(
+        "Enter URLs (one per line):", 
+        height=150,
+        placeholder="https://example.com/doc1.pdf\nhttps://example.com/doc2.docx\nhttps://example.com/doc3.txt"
+    )
+    
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        if st.button("📥 Import All", type="primary", disabled=not urls_text.strip()):
+            urls = [url.strip() for url in urls_text.strip().split('\n') if url.strip()]
+            
+            if urls:
+                st.markdown("### Import Progress")
+                
+                # Create progress tracking
+                overall_progress = st.progress(0)
+                results = []
+                
+                for i, url in enumerate(urls):
+                    with st.expander(f"Importing {i+1}/{len(urls)}: {url}", expanded=True):
+                        file_progress = st.progress(0)
+                        file_status = st.empty()
+                        
+                        try:
+                            success, message, import_record = web_importer.download_from_url(url)
+                            
+                            if success:
+                                file_progress.progress(1.0)
+                                file_status.success(f"✅ {import_record.filename}")
+                            else:
+                                file_progress.progress(0)
+                                file_status.error(f"❌ {message}")
+                                
+                            results.append(import_record)
+                            
+                        except Exception as e:
+                            file_progress.progress(0)
+                            file_status.error(f"❌ Error: {str(e)}")
+                            # Create a failed import record
+                            failed_record = type('ImportRecord', (), {
+                                'status': 'failed', 
+                                'url': url, 
+                                'error_message': str(e),
+                                'filename': 'failed'
+                            })()
+                            results.append(failed_record)
+                    
+                    # Update overall progress
+                    overall_progress.progress((i + 1) / len(urls))
+                
+                # Show summary
+                successful = sum(1 for r in results if r.status == "success")
+                st.markdown("### Import Summary")
+                
+                if successful > 0:
+                    st.success(f"✅ Successfully imported {successful}/{len(urls)} files")
+                    if successful < len(urls):
+                        st.warning(f"⚠️ {len(urls) - successful} files failed to import")
+                else:
+                    st.error("❌ No files were successfully imported")
+    
+    with col2:
+        if st.button("🔄 Validate URLs"):
+            urls = [url.strip() for url in urls_text.strip().split('\n') if url.strip()]
+            
+            if urls:
+                st.markdown("### URL Validation")
+                
+                for url in urls:
+                    is_valid, message, detected_ext = web_importer.is_valid_url(url)
+                    if is_valid:
+                        ext_info = f" (detected: {detected_ext})" if detected_ext else ""
+                        st.success(f"✅ {url}{ext_info}")
+                    else:
+                        st.error(f"❌ {url}: {message}")
+    
+    with col3:
+        st.markdown("**Supported Formats:**")
+        st.markdown("""
+        - 📄 PDF documents
+        - 📝 Word documents (DOCX)
+        - 📊 PowerPoint presentations (PPTX)
+        - 📃 Text files (TXT)
+        - 🖼️ Images (JPG, PNG, GIF, etc.)
+        """)
+    
+    st.markdown("---")
+    
+    # Recent imports section
+    st.subheader("📋 Recent Imports")
+    
+    # Check for recent files in Data folder
+    recent_files = []
+    if data_folder.exists():
+        for file_path in data_folder.glob("**/*"):
+            if file_path.is_file() and not file_path.name.startswith('.'):
+                recent_files.append({
+                    "name": file_path.name,
+                    "path": str(file_path),
+                    "size": file_path.stat().st_size,
+                    "modified": datetime.fromtimestamp(file_path.stat().st_mtime)
+                })
+    
+    # Sort by modification time (newest first)
+    recent_files.sort(key=lambda x: x["modified"], reverse=True)
+    
+    if recent_files:
+        # Show only the 10 most recent files
+        for file_info in recent_files[:10]:
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.text(file_info["name"])
+            
+            with col2:
+                size_mb = file_info["size"] / (1024 * 1024)
+                st.text(f"{size_mb:.2f} MB")
+            
+            with col3:
+                st.text(file_info["modified"].strftime("%m/%d %H:%M"))
+        
+        st.caption(f"Showing {min(10, len(recent_files))} of {len(recent_files)} files in knowledge base")
+    else:
+        st.info("No files found in the knowledge base. Import some files to get started!")
 
 if __name__ == "__main__":
     main()
