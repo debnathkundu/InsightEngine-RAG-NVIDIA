@@ -227,6 +227,15 @@ def display_system_message(notification_type: str, filename: str = "", details: 
         bg_color = "#e8f5e8"
         border_color = "#4caf50"
         content = "RAG Assistant initialized successfully!"
+    elif notification_type == "memory_update":
+        icon = "🧠🗑️"
+        bg_color = "#e8f5e8"
+        border_color = "#4caf50"
+        status_type = details.get("status_type", "")
+        if status_type == "memory_cleared":
+            content = "Conversation memory has been cleared. Future questions will be treated as new conversations."
+        else:
+            content = "Memory updated"
     elif notification_type == "error":
         icon = "⚠️"
         bg_color = "#ffebee"
@@ -635,7 +644,8 @@ def display_sidebar(rag_agent):
                             "content": chat_message,
                             "timestamp": timestamp,
                             "type": "memory_update",
-                            "status_type": "memory_cleared"
+                            "status_type": "memory_cleared",
+                            "details": {"status_type": "memory_cleared"}
                         })
                         st.rerun()
             
@@ -808,15 +818,26 @@ def display_chat_interface(rag_agent):
                 # Extract chat history for conversational context
                 chat_history = []
                 if hasattr(rag_agent, 'is_conversational_mode_enabled') and rag_agent.is_conversational_mode_enabled():
+                    # Find the last memory clear message to determine valid conversation history
+                    last_memory_clear_index = -1
+                    for i, msg in enumerate(st.session_state.messages):
+                        if (msg["role"] == "system" and 
+                            msg.get("type") == "memory_update" and 
+                            msg.get("status_type") == "memory_cleared"):
+                            last_memory_clear_index = i
+                    
                     # Extract only user-assistant conversation pairs for context
+                    # Only consider messages after the last memory clear
                     user_messages = []
                     assistant_messages = []
                     
-                    for msg in st.session_state.messages:
-                        if msg["role"] == "user" and msg.get("type") == "chat":
-                            user_messages.append(msg["content"])
-                        elif msg["role"] == "assistant" and msg.get("type") == "chat" and msg.get("content"):
-                            assistant_messages.append(msg["content"])
+                    for i, msg in enumerate(st.session_state.messages):
+                        # Only include messages after the last memory clear
+                        if i > last_memory_clear_index:
+                            if msg["role"] == "user" and msg.get("type") == "chat":
+                                user_messages.append(msg["content"])
+                            elif msg["role"] == "assistant" and msg.get("type") == "chat" and msg.get("content"):
+                                assistant_messages.append(msg["content"])
                     
                     # Pair up the messages (excluding the current question)
                     min_len = min(len(user_messages) - 1, len(assistant_messages))  # -1 to exclude current question
