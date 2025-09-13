@@ -286,7 +286,14 @@ class RAGAgent:
         # Initialize components
         self.document_loader = DocumentLoader(docs_folder)
         self.embeddings = NVIDIAEmbeddings(api_key)
-        self.vector_db = VectorDatabase(self.embeddings, vector_db_path)
+        # Enable hybrid search by default with balanced weights
+        self.vector_db = VectorDatabase(
+            self.embeddings, 
+            vector_db_path,
+            enable_hybrid_search=True,
+            bm25_weight=0.3,
+            vector_weight=0.7
+        )
         
         # Initialize both LLM wrappers for flexibility
         self.llm = SimpleNVIDIALLM(api_key)  # For backward compatibility
@@ -367,7 +374,7 @@ Answer: """
             self.enable_memory = False
     
     def _setup_chains(self):
-        """Setup the LangChain retrieval chains"""
+        """Setup the LangChain retrieval chains with hybrid search support"""
         try:
             if not self.vector_db.vectorstore:
                 logger.warning("Vector store not available for chain setup")
@@ -377,9 +384,16 @@ Answer: """
                 logger.warning("LangChain LLM not available - skipping chain setup")
                 return
                 
-            retriever = self.vector_db.vectorstore.as_retriever(
-                search_kwargs={"k": 4}
-            )
+            # Get the appropriate retriever (hybrid or vector-only)
+            retriever = self.vector_db.get_retriever(k=4)
+            
+            if not retriever:
+                logger.error("Failed to get retriever for chain setup")
+                return
+            
+            # Log which type of retriever is being used
+            retriever_type = "hybrid" if self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever else "vector-only"
+            logger.info(f"Setting up chains with {retriever_type} retriever")
             
             # Setup basic retrieval chain for non-conversational queries
             self.basic_chain = RetrievalQA.from_chain_type(
@@ -411,7 +425,7 @@ Answer: """
                     }
                 )
                 
-            logger.info("✅ LangChain retrieval chains initialized")
+            logger.info("✅ LangChain retrieval chains initialized with hybrid search support")
             
         except Exception as e:
             logger.error(f"Failed to setup chains: {str(e)}")
@@ -584,11 +598,26 @@ Answer: """
                         logger.error(f"Traceback: {traceback.format_exc()}")
                         logger.warning(f"LangChain approach failed, using legacy method: {str(e)}")
 
-                # Legacy approach as final fallback
-                # Get relevant documents
-                scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
+                # Legacy approach as final fallback - now with hybrid search support
+                # Try hybrid search first, fall back to vector search
+                try:
+                    source_docs = self.vector_db.hybrid_search(question, k=k)
+                    scores = None  # Hybrid search doesn't return scores directly
+                    
+                    if not source_docs:
+                        # Fall back to vector search with scores
+                        scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
+                        source_docs = [doc for doc, score in scored_docs]
+                        scores = [score for doc, score in scored_docs]
+                        
+                except Exception as e:
+                    logger.warning(f"Hybrid search failed, using vector search: {str(e)}")
+                    # Fall back to vector search with scores
+                    scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
+                    source_docs = [doc for doc, score in scored_docs]
+                    scores = [score for doc, score in scored_docs]
 
-                if not scored_docs:
+                if not source_docs:
                     return RAGResponse(
                         answer="I couldn't find any relevant information to answer your question.",
                         source_documents=[],
@@ -596,10 +625,6 @@ Answer: """
                         processing_time=time.time() - start_time,
                         chat_history=chat_history
                     )
-
-                # Extract documents and scores
-                source_docs = [doc for doc, score in scored_docs]
-                scores = [score for doc, score in scored_docs]
 
                 # Create context from retrieved documents
                 context = "\n\n".join([doc.page_content for doc in source_docs])
@@ -623,12 +648,13 @@ Answer: """
                 answer = self.llm.generate_response(prompt)
 
                 processing_time = time.time() - start_time
-                logger.info(f"Question answered using legacy approach in {processing_time:.2f} seconds")
+                search_method = "hybrid" if self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever else "vector"
+                logger.info(f"Question answered using legacy approach with {search_method} search in {processing_time:.2f} seconds")
 
                 return RAGResponse(
                     answer=answer,
                     source_documents=source_docs,
-                    confidence_scores=scores,
+                    confidence_scores=scores,  # May be None for hybrid search
                     query=question,
                     processing_time=processing_time,
                     chat_history=chat_history
@@ -644,18 +670,30 @@ Answer: """
                 chat_history=chat_history
             )
     
-    def get_relevant_documents(self, query: str, k: int = 4) -> List[Tuple[Document, float]]:
+    def get_relevant_documents(self, query: str, k: int = 4, use_hybrid: bool = True) -> List[Tuple[Document, float]]:
         """
         Get relevant documents for a query with similarity scores
         
         Args:
             query: Search query
             k: Number of documents to retrieve
+            use_hybrid: Whether to use hybrid search (if available)
             
         Returns:
-            List of (document, score) tuples
+            List of (document, score) tuples. Note: hybrid search may return (document, None) tuples
         """
-        return self.vector_db.similarity_search_with_scores(query, k=k)
+        try:
+            if use_hybrid and self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever:
+                # Use hybrid search (scores not available)
+                docs = self.vector_db.hybrid_search(query, k=k)
+                return [(doc, None) for doc in docs]
+            else:
+                # Use vector search with scores
+                return self.vector_db.similarity_search_with_scores(query, k=k)
+        except Exception as e:
+            logger.error(f"Error getting relevant documents: {str(e)}")
+            # Fall back to vector search
+            return self.vector_db.similarity_search_with_scores(query, k=k)
     
     def get_knowledge_base_stats(self) -> Dict[str, Any]:
         """
@@ -735,6 +773,51 @@ Answer: """
             self.conversational_chain is not None and
             self.langchain_llm is not None
         )
+    
+    def is_hybrid_search_enabled(self) -> bool:
+        """Check if hybrid search is enabled and working"""
+        return (
+            self.vector_db.enable_hybrid_search and 
+            self.vector_db.ensemble_retriever is not None
+        )
+    
+    def configure_hybrid_search(self, bm25_weight: float = 0.3, vector_weight: float = 0.7) -> bool:
+        """
+        Configure hybrid search weights
+        
+        Args:
+            bm25_weight: Weight for BM25 retriever (0.0-1.0)
+            vector_weight: Weight for vector retriever (0.0-1.0)
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Validate weights
+            if not (0.0 <= bm25_weight <= 1.0) or not (0.0 <= vector_weight <= 1.0):
+                logger.error("Weights must be between 0.0 and 1.0")
+                return False
+            
+            if abs((bm25_weight + vector_weight) - 1.0) > 0.01:
+                logger.warning(f"Weights don't sum to 1.0: BM25={bm25_weight}, Vector={vector_weight}")
+            
+            # Update weights
+            self.vector_db.bm25_weight = bm25_weight
+            self.vector_db.vector_weight = vector_weight
+            
+            # Recreate ensemble retriever if it exists
+            if self.vector_db.ensemble_retriever:
+                self.vector_db._create_ensemble_retriever()
+                
+                # Recreate chains to use updated retriever
+                self._setup_chains()
+            
+            logger.info(f"✅ Hybrid search weights updated: BM25={bm25_weight}, Vector={vector_weight}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to configure hybrid search: {str(e)}")
+            return False
     
     def add_documents_to_knowledge_base(self, new_docs_folder: Optional[str] = None) -> bool:
         """

@@ -19,6 +19,9 @@ langchain-unstructured>=0.0.1
 # Vector database
 faiss-cpu>=1.7.0
 
+# Hybrid search (BM25 + Vector search)
+rank-bm25>=0.2.2
+
 # Environment management
 python-dotenv>=1.0.0
 
