@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 
 from src.rag_agent import RAGAgent
 from src.nvidia_embeddings import NVIDIAEmbeddings
+from src.document_loader import DocumentLoader
 
 
 def print_banner():
@@ -21,7 +22,7 @@ def print_banner():
     print("=" * 60)
     print("🤖 RAG Agent - NVIDIA NemoRetriever Template")
     print("=" * 60)
-    print("Ask questions about your PDF documents!")
+    print("Ask questions about your documents!")
     print("Type 'quit', 'exit', or 'q' to exit")
     print("Type 'help' for available commands")
     print("Type 'stats' to see knowledge base statistics")
@@ -34,7 +35,7 @@ def print_help():
     print("\n📖 Available Commands:")
     print("  help     - Show this help message")
     print("  stats    - Show knowledge base statistics")
-    print("  rebuild  - Rebuild the knowledge base from PDFs")
+    print("  rebuild  - Rebuild the knowledge base from all supported files")
     print("  clear    - Clear the screen")
     print("  quit/exit/q - Exit the application")
     print("\n💡 Tips:")
@@ -55,8 +56,8 @@ def print_stats(rag_agent: RAGAgent):
             print(f"  {status_emoji} Status: {value}")
         elif key == "document_count":
             print(f"  📄 Documents: {value}")
-        elif key == "pdf_files_available":
-            print(f"  📁 PDF Files: {value}")
+        elif key == "files_available":
+            print(f"  📁 Files: {value}")
         elif key == "docs_folder":
             print(f"  📂 Docs Folder: {value}")
         elif key == "index_path":
@@ -112,7 +113,7 @@ def setup_rag_agent():
     if not Path(docs_folder).exists():
         print(f"📁 Creating documents folder: {docs_folder}")
         Path(docs_folder).mkdir(parents=True, exist_ok=True)
-        print(f"📝 Please add your PDF files to: {Path(docs_folder).absolute()}")
+        print(f"📝 Please add your files to: {Path(docs_folder).absolute()}")
     
     # Test NVIDIA API connection
     print("🔌 Testing NVIDIA API connection...")
@@ -150,7 +151,7 @@ def main():
     print("\n🔨 Setting up knowledge base...")
     if not rag_agent.setup_knowledge_base():
         print("❌ Failed to setup knowledge base.")
-        print("Please ensure you have PDF files in the documents folder and try again.")
+        print("Please ensure you have supported files in the documents folder and try again.")
 
         # Ask if user wants to continue anyway
         response = input("\nWould you like to continue anyway? (y/n): ").lower().strip()
