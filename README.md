@@ -78,7 +78,8 @@ graph TB
     E --> N[🔍 Query Embedding]
     N --> F
     F --> O[📚 Relevant Chunks]
-    O --> P[🤖 NVIDIA LLM]
+    O --> X[🎯 Re-ranker]
+    X --> P[🤖 NVIDIA LLM]
     P --> Q[💬 AI Response]
     G --> P
     Q --> R[📊 Feedback System]
@@ -89,6 +90,7 @@ graph TB
     style C fill:#fff3e0
     style F fill:#e8f5e8
     style P fill:#fce4ec
+    style X fill:#E0F2F1
 ```
 
 ## 📋 Prerequisites
