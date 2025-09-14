@@ -108,6 +108,31 @@ graph TB
 1.  **NVIDIA Developer Account**: Get your free API key at [build.nvidia.com](https://build.nvidia.com).
 2.  **Git**: For cloning the repository.
 
+### 🔑 Getting NVIDIA API Key
+
+**Step 1: Create NVIDIA Developer Account**
+
+- Visit build.nvidia.com
+- Click "Sign Up" or "Log In" if you have an account
+- Complete the registration process
+- Verify your email address
+
+**Step 2: Generate API Key**
+
+- After logging in, navigate to your Dashboard
+- Click on "API Keys" or "Credentials"
+- Click "Generate New API Key"
+- Give your key a descriptive name (e.g., "RAG-Template-Key")
+- Copy and save the API key securely
+- ⚠️ **Important**: Save this key immediately - you won't be able to see it again!
+
+**Step 3: Verify API Access**
+
+- Ensure you have access to:
+  - Embedding Models: `nvidia/nv-embed-v1`
+  - LLM Models: `meta/llama-3.1-8b-instruct`
+- Check the NVIDIA API documentation for current model availability
+
 ## 🚀 Quick Start
 
 ### 1. Clone & Setup Environment
@@ -157,13 +182,13 @@ Place your PDF, DOCX, PPTX, or TXT files into the `Data/Docs` directory.
 You can launch the application in three ways:
 
 ```bash
-# Option A: Web Interface (Recommended)
+# Option A: Web Interface
 python start_web_interface.py
 
 # Option B: Command Line Interface
 python main.py
 
-# Option C: Direct Streamlit
+# Option C: Direct Streamlit (Recommended)
 streamlit run streamlit_app.py
 ```
 
