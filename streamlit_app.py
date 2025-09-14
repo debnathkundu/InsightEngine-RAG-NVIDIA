@@ -938,16 +938,30 @@ def display_chat_interface(rag_agent):
     # Initialize chat history
     if "messages" not in st.session_state:
         st.session_state.messages = []
-        # Add initial system message
+        # Add initial system notification
         st.session_state.messages.append({
             "role": "system",
-            "content": "🤖 RAG Assistant initialized successfully!",
+            "content": "🚀 **System Initialization Complete**\n\nRAG Assistant has been successfully initialized and is ready for operation.",
             "timestamp": datetime.now(),
             "type": "system_init"
         })
+        # Add comprehensive welcome message
         st.session_state.messages.append({
             "role": "assistant",
-            "content": "Hello! I'm your RAG Assistant powered by NVIDIA NemoRetriever. I can help you find information from your document collection. What would you like to know?",
+            "content": """**Welcome to RAG Assistant - NVIDIA NemoRetriever Edition** 🤖
+
+**Core Capabilities:**
+• **Semantic Search**: FAISS vector database with nvidia/nv-embed-v1 embeddings
+• **Hybrid Search**: Combined semantic + BM25 keyword search (70%/30% weighting)
+• **Document Re-ranking**: Advanced relevance scoring for improved results
+• **Conversational Memory**: Context-aware multi-turn conversations
+• **Real-time Updates**: Automatic document indexing with file watcher
+
+**Supported Formats:** PDF, Word, PowerPoint, Text files
+**LLM Engine:** meta/llama-3.1-8b-instruct via NVIDIA API
+**Response Features:** Source citations, processing metrics, feedback system
+
+Ready to answer questions about your document collection. Ask anything!""",
             "sources": [],
             "processing_time": 0,
             "timestamp": datetime.now(),
@@ -1002,6 +1016,17 @@ def display_chat_interface(rag_agent):
                     <div class="chat-message {status_class}" style="border-left: 4px solid #9c27b0; background-color: #f3e5f5; margin: 0.5rem 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <strong>💾 Vector Store</strong>
+                            <small style="color: #666;">{time_str}</small>
+                        </div>
+                        {message["content"]}
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif message_type == "system_init":
+                    # System initialization message - use actual content
+                    st.markdown(f"""
+                    <div class="chat-message" style="border-left: 4px solid #4caf50; background-color: #e8f5e8; margin: 0.5rem 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <strong>🚀 System</strong>
                             <small style="color: #666;">{time_str}</small>
                         </div>
                         {message["content"]}
@@ -1626,15 +1651,14 @@ def main():
             
             **First ask:** "What is the main topic of the documents?"
             **Then follow up:** "Can you explain that in more detail?"
-            **Or ask:** "What are the key benefits of this?"
-            
-            **Other follow-up examples:**
-            • "What else should I know about this?"
-            • "Are there any requirements mentioned?"
-            • "How does this compare to [other topic]?"
-            • "Can you give me more examples?"
-            • "What are the implications of this?"
+            **Or ask:** "What are the key benefits of this?"            
             """)
+            #             **Other follow-up examples:**
+            # • "What else should I know about this?"
+            # • "Are there any requirements mentioned?"
+            # • "How does this compare to [other topic]?"
+            # • "Can you give me more examples?"
+            # • "What are the implications of this?"
         else:
             st.info("""
             **Sample Questions:**
