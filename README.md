@@ -1,312 +1,590 @@
-# 🚀 Enterprise RAG Template with NVIDIA NemoRetriever
+# 🚀 InsightEngine RAG - NVIDIA Powered AI Document Assistant# 🚀 InsightEngine RAG - NVIDIA Powered AI Document Assistant
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io)
-[![NVIDIA](https://img.shields.io/badge/NVIDIA-API-green)](https://build.nvidia.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![LangChain](https://img.shields.io/badge/LangChain-0.1%2B-purple)](https://langchain.com)
-[![FAISS](https://img.shields.io/badge/FAISS-CPU-orange)](https://faiss.ai)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://python.org)
 
-A **production-ready, enterprise-grade RAG (Retrieval-Augmented Generation)** system built with **NVIDIA's state-of-the-art embedding models** and **LangChain**. This comprehensive template provides everything you need to build, deploy, and scale AI-powered document Q&A systems with advanced features like conversational memory, feedback analytics, and web import capabilities.
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io)[![Streamlit](https://img.shields.io/badge/Streamlit-1.28%2B-red)](https://streamlit.io)
 
-## 🌟 **Complete Feature Set**
+[![NVIDIA](https://img.shields.io/badge/NVIDIA-API-green)](https://build.nvidia.com)[![NVIDIA](https://img.shields.io/badge/NVIDIA-API-green)](https://build.nvidia.com)
 
-### 🤖 **Core AI Features**
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- **NVIDIA AI Integration**: Powered by `nvidia/nv-embed-v1` embeddings and `meta/llama-3.1-8b-instruct` LLM
-- **Advanced RAG Pipeline**: Intelligent document chunking, semantic search, and context-aware retrieval
-- **Hybrid Search**: Combines BM25 keyword matching (30%) + vector similarity (70%) for optimal retrieval
-- **Document Re-ranking**: Cross-encoder models re-rank retrieved documents for maximum relevance
-- **Multiple Document Formats**: PDF, DOCX, PPTX, TXT, and RTF support with auto-detection
-- **Semantic Vector Search**: FAISS-based similarity search with persistence and optimization
+An **enterprise-ready RAG (Retrieval-Augmented Generation)** system powered by NVIDIA's cutting-edge AI models. Transform your documents into an intelligent Q&A assistant with advanced hybrid search, conversational memory, and real-time analytics.An **enterprise-ready RAG (Retrieval-Augmented Generation)** system powered by NVIDIA's cutting-edge AI models. Transform your documents into an intelligent Q&A assistant with advanced hybrid search, conversational memory, and real-time analytics.
 
-### 🧠 **Conversational AI**
+## ✨ **Key Features**## ✨ **Key Features**
 
-- **Conversational Memory**: Remembers conversation context for natural follow-up questions
-- **Context Awareness**: Understanding references like "that", "this", "it" without repetition
-- **Memory Management**: Configurable memory window (10 exchanges) with manual controls
-- **Fallback Mechanisms**: Graceful degradation to basic mode if needed
+### 🎯 **Advanced AI Capabilities**### 🎯 **Advanced AI Capabilities**
 
-### 🌐 **Professional Web Interface**
+- **NVIDIA AI Models**: `nvidia/nv-embed-v1` embeddings + `meta/llama-3.1-8b-instruct` LLM- **NVIDIA AI Models**: `nvidia/nv-embed-v1` embeddings + `meta/llama-3.1-8b-instruct` LLM
 
-- **Modern UI/UX**: Beautiful Streamlit interface with responsive design
-- **Real-time Chat**: Interactive chat interface with typing indicators
+- **Hybrid Search**: BM25 keyword matching (30%) + Vector similarity (70%) for optimal accuracy- **Hybrid Search**: BM25 keyword matching (30%) + Vector similarity (70%) for optimal accuracy
+
+- **Smart Re-ranking**: Cross-encoder models boost document relevance by up to 40%- **Smart Re-ranking**: Cross-encoder models boost document relevance by up to 40%
+
+- **Multi-format Support**: PDF, DOCX, PPTX, TXT with intelligent chunking- **Multi-format Support**: PDF, DOCX, PPTX, TXT with intelligent chunking
+
+- **Conversational Memory**: Context-aware responses with configurable memory window- **Conversational Memory**: Context-aware responses with configurable memory window
+
+### 💼 **Production Ready**### 💼 **Production Ready**
+
+- **Beautiful Web Interface**: Modern Streamlit UI with real-time chat- **Beautiful Web Interface**: Modern Streamlit UI with real-time chat
+
+- **Auto File Monitoring**: Automatically updates when documents change- **Auto File Monitoring**: Automatically updates when documents change
+
+- **Feedback Analytics**: Track user satisfaction and system performance- **Feedback Analytics**: Track user satisfaction and system performance
+
+- **Health Monitoring**: Comprehensive system diagnostics and optimization- **Health Monitoring**: Comprehensive system diagnostics and optimization
+
+- **Scalable Architecture**: Modular design for easy customization and deployment- **Scalable Architecture**: Modular design for easy customization and deployment
+
 - **Source Attribution**: Detailed document references with page numbers and excerpts
-- **Visual Analytics**: Interactive charts, document statistics, and coverage analysis
+
+## 🏗️ **System Architecture**- **Visual Analytics**: Interactive charts, document statistics, and coverage analysis
+
 - **Multi-tab Layout**: Chat Assistant, Document Statistics, Feedback Analysis, Web Import
 
-### 📊 **Advanced Analytics & Feedback**
+````
 
-- **User Feedback System**: Thumbs up/down rating for every AI response
-- **Analytics Dashboard**: Real-time metrics, satisfaction scores, and trend analysis
-- **Export Capabilities**: Comprehensive JSON exports with feedback data
-- **Performance Monitoring**: Response times, source distribution, and system health
+Documents → Document Loader → Text Chunks → NVIDIA Embeddings → Vector Database### 📊 **Advanced Analytics & Feedback**
 
-### 🌐 **Web Import & File Management**
+                                                                        ↓
 
-- **URL Import**: Download documents directly from web URLs into the knowledge base
-- **Batch Processing**: Import multiple files simultaneously with progress tracking
-- **Smart Validation**: URL validation and file type detection before download
-- **Automatic Integration**: Downloaded files auto-processed and indexed
+User Query → NVIDIA Embeddings → Hybrid Search (BM25+Vector) → Re-ranking → LLM → Response- **User Feedback System**: Thumbs up/down rating for every AI response
+
+                                           ↓- **Analytics Dashboard**: Real-time metrics, satisfaction scores, and trend analysis
+
+                                 Conversational Memory → Feedback Analytics- **Export Capabilities**: Comprehensive JSON exports with feedback data
+
+```- **Performance Monitoring**: Response times, source distribution, and system health
+
+
+
+**Core Components:**### 🌐 **Web Import & File Management**
+
+- **RAG Agent**: Orchestrates the entire pipeline
+
+- **Vector Database**: FAISS-based storage with hybrid search- **URL Import**: Download documents directly from web URLs into the knowledge base
+
+- **Document Loader**: Multi-format document processing- **Batch Processing**: Import multiple files simultaneously with progress tracking
+
+- **NVIDIA Embeddings**: State-of-the-art semantic understanding- **Smart Validation**: URL validation and file type detection before download
+
+- **Document Re-ranker**: Cross-encoder for relevance optimization- **Automatic Integration**: Downloaded files auto-processed and indexed
+
+- **Web Interface**: Streamlit-based chat interface
 
 ### � **Enterprise Features**
 
+## 📋 **Prerequisites**
+
 - **Production Ready**: Comprehensive error handling, logging, and monitoring
-- **Scalable Architecture**: Modular design supporting horizontal scaling
-- **Security**: Environment-based configuration, input sanitization, secure file handling
-- **Monitoring**: Health checks, performance metrics, and system status indicators
 
-## 🏗️ **System Architecture**
+### System Requirements- **Scalable Architecture**: Modular design supporting horizontal scaling
 
-```mermaid
-graph TB
-    A[👤 User Interface] --> B[� Streamlit Web App]
+- **Python**: 3.8+ (3.9+ recommended)- **Security**: Environment-based configuration, input sanitization, secure file handling
+
+- **RAM**: 4GB minimum, 8GB+ recommended- **Monitoring**: Health checks, performance metrics, and system status indicators
+
+- **Storage**: 2GB free space
+
+- **Network**: Stable internet for NVIDIA API## 🏗️ **System Architecture**
+
+
+
+### Required Accounts```mermaid
+
+1. **NVIDIA Developer Account**: Get your free API key at [build.nvidia.com](https://build.nvidia.com)graph TB
+
+2. **Git**: For repository cloning    A[👤 User Interface] --> B[� Streamlit Web App]
+
     B --> C[🤖 RAG Agent]
-    C --> D[📄 Document Loader]
+
+## 🚀 **Quick Start**    C --> D[📄 Document Loader]
+
     C --> E[🧮 NVIDIA Embeddings]
-    C --> F[🗄️ Vector Database]
+
+### 1. Clone & Setup Environment    C --> F[🗄️ Vector Database]
+
     C --> G[🧠 Conversational Memory]
 
-    H[📁 Documents] --> D
-    I[🌐 Web URLs] --> J[📥 Web Importer] --> H
-    D --> K[📋 Text Chunks]
+```bash
+
+# Clone repository    H[📁 Documents] --> D
+
+git clone https://github.com/your-username/InsightEngine-RAG-NVIDIA.git    I[🌐 Web URLs] --> J[📥 Web Importer] --> H
+
+cd RAG-Template-for-NVIDIA-nemoretriever    D --> K[📋 Text Chunks]
+
     K --> E
-    E --> L[🔢 Vector Embeddings]
-    L --> F
 
-    M[❓ User Query] --> E
-    E --> N[🔍 Query Embedding]
-    N --> F
-    F --> O[📚 Relevant Chunks]
-    O --> P[🤖 NVIDIA LLM]
-    P --> Q[💬 AI Response]
+# Create virtual environment    E --> L[🔢 Vector Embeddings]
 
-    G --> P
+python -m venv rag_env    L --> F
+
+
+
+# Activate environment    M[❓ User Query] --> E
+
+# Windows:    E --> N[🔍 Query Embedding]
+
+rag_env\Scripts\activate    N --> F
+
+# macOS/Linux:    F --> O[📚 Relevant Chunks]
+
+source rag_env/bin/activate    O --> P[🤖 NVIDIA LLM]
+
+```    P --> Q[💬 AI Response]
+
+
+
+### 2. Install Dependencies    G --> P
+
     Q --> R[📊 Feedback System]
-    R --> S[📈 Analytics]
 
-    style A fill:#e1f5fe
+```bash    R --> S[📈 Analytics]
+
+# Install Python packages
+
+pip install -r requirements.txt    style A fill:#e1f5fe
+
     style B fill:#f3e5f5
-    style C fill:#fff3e0
-    style F fill:#e8f5e8
+
+# Install system dependencies (macOS)    style C fill:#fff3e0
+
+brew install libmagic    style F fill:#e8f5e8
+
     style P fill:#fce4ec
-```
 
-## �🎯 **Perfect For**
+# Install system dependencies (Ubuntu/Debian)```
 
-- **Enterprise Knowledge Management**: Internal document Q&A systems
+sudo apt-get install libmagic1
+
+```## �🎯 **Perfect For**
+
+
+
+### 3. Configure API Key- **Enterprise Knowledge Management**: Internal document Q&A systems
+
 - **Legal Document Analysis**: Contract review, policy interpretation, compliance
-- **Research & Academia**: Paper analysis, literature review, academic Q&A
-- **Technical Documentation**: API docs, manuals, troubleshooting guides
-- **Customer Support**: Knowledge base queries, FAQ automation
+
+```bash- **Research & Academia**: Paper analysis, literature review, academic Q&A
+
+# Copy environment template- **Technical Documentation**: API docs, manuals, troubleshooting guides
+
+cp .env.template .env- **Customer Support**: Knowledge base queries, FAQ automation
+
 - **Content Management**: Blog posts, articles, training materials
-- **Healthcare**: Medical documents, research papers, protocol analysis
-- **Financial Services**: Reports, regulations, compliance documentation
+
+# Edit .env file and add your NVIDIA API key- **Healthcare**: Medical documents, research papers, protocol analysis
+
+NVIDIA_API_KEY=nvapi-your-actual-api-key-here- **Financial Services**: Reports, regulations, compliance documentation
+
+````
 
 ## 📋 **Prerequisites & System Requirements**
 
+### 4. Add Your Documents
+
 ### **📱 System Requirements**
 
-| Component   | Minimum                                | Recommended          |
-| ----------- | -------------------------------------- | -------------------- |
-| **Python**  | 3.8+                                   | 3.9+                 |
-| **RAM**     | 4GB                                    | 8GB+                 |
-| **Storage** | 2GB free                               | 5GB+ free            |
-| **OS**      | Windows 10, macOS 10.14, Ubuntu 18.04+ | Latest versions      |
-| **CPU**     | 2 cores                                | 4+ cores             |
-| **Network** | Stable internet for NVIDIA API         | High-speed broadband |
+````bash
 
-### **📦 Required Dependencies**
+# Place your documents in the Data/Docs folder| Component   | Minimum                                | Recommended          |
+
+mkdir -p Data/Docs| ----------- | -------------------------------------- | -------------------- |
+
+# Copy your PDF, DOCX, PPTX, TXT files here| **Python**  | 3.8+                                   | 3.9+                 |
+
+```| **RAM**     | 4GB                                    | 8GB+                 |
+
+| **Storage** | 2GB free                               | 5GB+ free            |
+
+### 5. Launch the Application| **OS**      | Windows 10, macOS 10.14, Ubuntu 18.04+ | Latest versions      |
+
+| **CPU**     | 2 cores                                | 4+ cores             |
+
+**Option A: Web Interface (Recommended)**| **Network** | Stable internet for NVIDIA API         | High-speed broadband |
+
+```bash
+
+python start_web_interface.py### **📦 Required Dependencies**
+
+````
 
 - **Git**: For repository cloning
-- **Python Package Manager**: pip or conda
-- **Virtual Environment**: venv or conda (recommended)
-- **Web Browser**: Modern browser for web interface
+
+**Option B: Command Line Interface**- **Python Package Manager**: pip or conda
+
+```bash- **Virtual Environment**: venv or conda (recommended)
+
+python main.py- **Web Browser**: Modern browser for web interface
+
+```
 
 ### **🔑 NVIDIA Developer Account Setup**
 
-#### **Step 1: Create Account**
+**Option C: Direct Streamlit**
 
-1. **Visit NVIDIA Build Platform**: [build.nvidia.com](https://build.nvidia.com)
+````bash#### **Step 1: Create Account**
+
+streamlit run streamlit_app.py
+
+```1. **Visit NVIDIA Build Platform**: [build.nvidia.com](https://build.nvidia.com)
+
 2. **Sign Up**: Click "Sign Up" or "Log In" if you have an account
-3. **Complete Registration**: Fill in required details
+
+The web interface will open at `http://localhost:8501`3. **Complete Registration**: Fill in required details
+
 4. **Email Verification**: Check and verify your email address
-5. **Accept Terms**: Review and accept NVIDIA's terms of service
 
-#### **Step 2: Generate API Key**
+## 📚 **Usage Examples**5. **Accept Terms**: Review and accept NVIDIA's terms of service
 
-1. **Access Dashboard**: Navigate to your account dashboard
-2. **Find API Section**: Look for "API Keys", "Credentials", or "Keys" section
-3. **Generate New Key**: Click "Generate New API Key" or "Create Key"
+
+
+### Basic Q&A#### **Step 2: Generate API Key**
+
+````
+
+User: "What are the main topics covered in these documents?"1. **Access Dashboard**: Navigate to your account dashboard
+
+AI: "Based on your documents, the main topics include..."2. **Find API Section**: Look for "API Keys", "Credentials", or "Keys" section
+
+````3. **Generate New Key**: Click "Generate New API Key" or "Create Key"
+
 4. **Name Your Key**: Use descriptive name like "RAG-Enterprise-Production"
-5. **Copy Key**: **IMMEDIATELY** copy and save your API key
-6. **⚠️ Critical**: You cannot view the key again after leaving the page!
 
-#### **Step 3: Verify Model Access**
+### Conversational Follow-up5. **Copy Key**: **IMMEDIATELY** copy and save your API key
 
-Ensure you have access to these models:
+```6. **⚠️ Critical**: You cannot view the key again after leaving the page!
+
+User: "Tell me about machine learning"
+
+AI: "Machine learning is..."#### **Step 3: Verify Model Access**
+
+User: "What are its applications?"
+
+AI: "Building on the previous explanation, ML applications include..."Ensure you have access to these models:
+
+````
 
 - **Embedding Model**: `nvidia/nv-embed-v1` (for document embeddings)
-- **LLM Model**: `meta/llama-3.1-8b-instruct` (for text generation)
-- **Alternative LLMs**: `nvidia/llama-3.1-nemotron-70b-instruct` (if available)
 
-#### **Step 4: Test API Connection**
+### Specific Information Retrieval- **LLM Model**: `meta/llama-3.1-8b-instruct` (for text generation)
+
+```- **Alternative LLMs**: `nvidia/llama-3.1-nemotron-70b-instruct` (if available)
+
+User: "Find information about API authentication"
+
+AI: "According to the documentation, API authentication requires..."#### **Step 4: Test API Connection**
+
+```````
 
 ```bash
-# Quick API test (we'll do this later in setup)
+
+## 🔧 **Configuration**# Quick API test (we'll do this later in setup)
+
 curl -H "Authorization: Bearer YOUR_API_KEY" \
-     -H "Content-Type: application/json" \
-     https://integrate.api.nvidia.com/v1/models
-```
+
+### Environment Variables (.env)     -H "Content-Type: application/json" \
+
+```bash     https://integrate.api.nvidia.com/v1/models
+
+# NVIDIA API Configuration```
+
+NVIDIA_API_KEY=your-api-key-here
 
 ### **💳 Pricing & Usage**
 
-- **Free Tier**: Available for development and testing
-- **Rate Limits**: Check current limits on NVIDIA platform
-- **Production**: Consider paid plans for production usage
-- **Monitoring**: Track usage through NVIDIA dashboard
+# Optional Settings
 
-### **🔒 Security Considerations**
+DOCS_FOLDER=Data/Docs- **Free Tier**: Available for development and testing
 
-- **API Key Storage**: Never commit API keys to version control
-- **Environment Variables**: Store sensitive data in `.env` files
-- **Access Control**: Limit API key permissions if possible
+VECTOR_DB_PATH=./vector_db- **Rate Limits**: Check current limits on NVIDIA platform
+
+CHUNK_SIZE=1000- **Production**: Consider paid plans for production usage
+
+CHUNK_OVERLAP=200- **Monitoring**: Track usage through NVIDIA dashboard
+
+
+
+# Re-ranking Configuration### **🔒 Security Considerations**
+
+RERANKER_MODEL=cross-encoder/ms-marco-TinyBERT-L-2-v2
+
+RERANKER_MAX_LENGTH=512- **API Key Storage**: Never commit API keys to version control
+
+RERANKER_DEVICE=cpu- **Environment Variables**: Store sensitive data in `.env` files
+
+```- **Access Control**: Limit API key permissions if possible
+
 - **Regular Rotation**: Rotate API keys periodically for security
+
+### Advanced Configuration
 
 ## 🚀 **Complete Setup Guide - From Zero to Production**
 
-### **🔧 Step 1: Environment Setup**
+**Hybrid Search Weights**
 
-#### **1.1 Clone Repository**
+```python### **🔧 Step 1: Environment Setup**
 
-```bash
-# Clone the repository
-git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA.git
+# Adjust search strategy
+
+rag_agent.configure_hybrid_search(#### **1.1 Clone Repository**
+
+    bm25_weight=0.4,    # 40% keyword matching
+
+    vector_weight=0.6   # 60% semantic similarity```bash
+
+)# Clone the repository
+
+```git clone https://github.com/debnathkundu/InsightEngine-RAG-NVIDIA.git
+
 cd RAG-Template-for-NVIDIA-nemoretriever
 
-# Verify the clone
-ls -la
-```
+**Memory Settings**
 
-#### **1.2 Python Environment Setup**
+```python# Verify the clone
 
-**Option A: Virtual Environment (Recommended for most users)**
+# Configure conversational memoryls -la
 
-```bash
+rag_agent = RAGAgent(```
+
+    docs_folder="Data/Docs",
+
+    api_key=api_key,#### **1.2 Python Environment Setup**
+
+    memory_window_size=15,  # Remember 15 exchanges
+
+    enable_memory=True**Option A: Virtual Environment (Recommended for most users)**
+
+)
+
+``````bash
+
 # Create virtual environment
-python -m venv rag_env
 
-# Activate environment
-# Windows:
-rag_env\Scripts\activate
-# macOS/Linux:
-source rag_env/bin/activate
+## 📊 **Features Deep Dive**python -m venv rag_env
 
-# Verify activation (should show rag_env)
-which python
-```
 
-**Option B: Conda Environment (Recommended for data scientists)**
 
-```bash
-# Create conda environment
-conda create -n rag_env python=3.9 -y
-conda activate rag_env
+### Hybrid Search System# Activate environment
+
+- **BM25 Retrieval**: Exact keyword matching for specific terms# Windows:
+
+- **Vector Search**: Semantic similarity for conceptual queriesrag_env\Scripts\activate
+
+- **Ensemble Weighting**: Configurable balance between approaches# macOS/Linux:
+
+- **Automatic Fallback**: Graceful degradation if one method failssource rag_env/bin/activate
+
+
+
+### Document Re-ranking# Verify activation (should show rag_env)
+
+- **Cross-encoder Models**: Advanced relevance scoringwhich python
+
+- **Top-K Selection**: Intelligent document filtering```
+
+- **Performance Boost**: Up to 40% improvement in answer quality
+
+- **Configurable Models**: Multiple re-ranker options**Option B: Conda Environment (Recommended for data scientists)**
+
+
+
+### Conversational Memory```bash
+
+- **Context Awareness**: Understands "it", "that", "the previous topic"# Create conda environment
+
+- **Memory Window**: Configurable history lengthconda create -n rag_env python=3.9 -y
+
+- **Manual Controls**: Clear memory, set history programmaticallyconda activate rag_env
+
+- **Fallback Support**: Works even if advanced features fail
 
 # Verify environment
-conda info --envs
-```
 
-#### **1.3 Install System Dependencies**
+### Analytics & Monitoringconda info --envs
+
+- **User Feedback**: Thumbs up/down for every response```
+
+- **Performance Metrics**: Response times, accuracy tracking
+
+- **Health Monitoring**: System status and diagnostics#### **1.3 Install System Dependencies**
+
+- **Export Features**: JSON exports with analytics data
 
 **On macOS:**
 
-```bash
-# Install system dependencies
-brew install libmagic
-
-# Verify installation
-brew list | grep libmagic
-```
-
-**On Ubuntu/Debian:**
+## 🔍 **File Structure**
 
 ```bash
-# Install system dependencies
-sudo apt-get update
-sudo apt-get install libmagic1 libmagic-dev -y
 
-# Verify installation
-dpkg -l | grep libmagic
-```
+```# Install system dependencies
+
+RAG-Template-for-NVIDIA-nemoretriever/brew install libmagic
+
+├── src/                          # Core system modules
+
+│   ├── rag_agent.py             # Main RAG orchestrator# Verify installation
+
+│   ├── vector_database.py       # FAISS + hybrid searchbrew list | grep libmagic
+
+│   ├── document_loader.py       # Multi-format document processing```
+
+│   ├── nvidia_embeddings.py     # NVIDIA API integration
+
+│   ├── document_reranker.py     # Cross-encoder re-ranking**On Ubuntu/Debian:**
+
+│   ├── file_watcher.py          # Auto-update system
+
+│   └── web_importer.py          # URL-based document import```bash
+
+├── Data/Docs/                   # Place your documents here# Install system dependencies
+
+├── streamlit_app.py             # Web interfacesudo apt-get update
+
+├── main.py                      # CLI interfacesudo apt-get install libmagic1 libmagic-dev -y
+
+├── start_web_interface.py       # Quick launcher
+
+├── requirements.txt             # Python dependencies# Verify installation
+
+├── .env.template               # Configuration templatedpkg -l | grep libmagic
+
+└── README.md                   # This file```
+
+```````
 
 **On Windows:**
 
-```bash
-# Typically no additional system dependencies needed
+## 🐛 **Troubleshooting**
+
+```````bash
+
+### Common Issues# Typically no additional system dependencies needed
+
 # If issues occur, install Visual C++ Redistributable
-```
 
-### **🔧 Step 2: Install Python Dependencies**
+**API Key Issues**```
 
 ```bash
-# Upgrade pip for better dependency resolution
-pip install --upgrade pip
 
-# Install all dependencies
+# Verify API key format### **🔧 Step 2: Install Python Dependencies**
+
+echo $NVIDIA_API_KEY | wc -c  # Should be ~60+ characters
+
+```bash
+
+# Test API connection# Upgrade pip for better dependency resolution
+
+curl -H "Authorization: Bearer $NVIDIA_API_KEY" \pip install --upgrade pip
+
+     https://integrate.api.nvidia.com/v1/models
+
+```# Install all dependencies
+
 pip install -r requirements.txt
 
-# Verify critical installations
-python -c "import streamlit, langchain, faiss, requests; print('✅ All core dependencies installed')"
-```
+**Memory Issues**
 
-**Troubleshooting Common Installation Issues:**
+```bash# Verify critical installations
 
-```bash
+# Check available memorypython -c "import streamlit, langchain, faiss, requests; print('✅ All core dependencies installed')"
+
+python -c "import psutil; print(f'RAM: {psutil.virtual_memory().available/1024**3:.1f}GB')"```
+
+
+
+# Reduce chunk size if needed**Troubleshooting Common Installation Issues:**
+
+export CHUNK_SIZE=500
+
+``````bash
+
 # If FAISS installation fails
-pip install faiss-cpu --no-cache-dir
 
-# If LangChain issues occur
-pip install langchain-core langchain-community --upgrade
-
-# If Streamlit issues occur
-pip install streamlit --upgrade --force-reinstall
-```
-
-### **🔧 Step 3: Configuration Setup**
-
-#### **3.1 Environment Configuration**
+**Import Errors**pip install faiss-cpu --no-cache-dir
 
 ```bash
-# Copy environment template
-cp .env.template .env
 
-# Edit configuration file
-# Windows:
-notepad .env
-# macOS:
-open -a TextEdit .env
+# Reinstall dependencies# If LangChain issues occur
+
+pip install --upgrade -r requirements.txtpip install langchain-core langchain-community --upgrade
+
+
+
+# Check Python version# If Streamlit issues occur
+
+python --version  # Should be 3.8+pip install streamlit --upgrade --force-reinstall
+
+```````
+
+### Performance Optimization### **🔧 Step 3: Configuration Setup**
+
+- **Document Size**: Keep individual documents under 10MB
+
+- **Chunk Strategy**: Adjust `CHUNK_SIZE` and `CHUNK_OVERLAP`#### **3.1 Environment Configuration**
+
+- **Memory Management**: Use smaller memory windows for large conversations
+
+- **Hardware**: More RAM and CPU cores improve performance```bash
+
+# Copy environment template
+
+## 🤝 **Contributing**cp .env.template .env
+
+1. Fork the repository# Edit configuration file
+
+2. Create feature branch: `git checkout -b feature/amazing-feature`# Windows:
+
+3. Commit changes: `git commit -m 'Add amazing feature'`notepad .env
+
+4. Push to branch: `git push origin feature/amazing-feature`# macOS:
+
+5. Open Pull Requestopen -a TextEdit .env
+
 # Linux:
-nano .env
-```
+
+## 📄 **License**nano .env
+
+````
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 #### **3.2 Configuration Values**
 
-```env
-# NVIDIA API Configuration (REQUIRED)
-NVIDIA_API_KEY=nvapi-YOUR_ACTUAL_API_KEY_HERE
+## 🙏 **Acknowledgments**
 
-# System Configuration (OPTIONAL - Defaults Provided)
-DOCS_FOLDER=Data/Docs
+```env
+
+- **NVIDIA**: For providing state-of-the-art AI models through their API# NVIDIA API Configuration (REQUIRED)
+
+- **LangChain**: For the robust RAG frameworkNVIDIA_API_KEY=nvapi-YOUR_ACTUAL_API_KEY_HERE
+
+- **Streamlit**: For the beautiful web interface framework
+
+- **FAISS**: For efficient vector similarity search# System Configuration (OPTIONAL - Defaults Provided)
+
+- **Sentence Transformers**: For document re-ranking capabilitiesDOCS_FOLDER=Data/Docs
+
 VECTOR_DB_PATH=./vector_db
-CHUNK_SIZE=1000
+
+## 📞 **Support**CHUNK_SIZE=1000
+
 CHUNK_OVERLAP=200
 
-# Advanced Configuration (OPTIONAL)
-MAX_CHUNKS_PER_DOC=50
+- **Issues**: [GitHub Issues](https://github.com/your-username/InsightEngine-RAG-NVIDIA/issues)
+
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/InsightEngine-RAG-NVIDIA/discussions)# Advanced Configuration (OPTIONAL)
+
+- **Email**: your-email@domain.comMAX_CHUNKS_PER_DOC=50
+
 SIMILARITY_THRESHOLD=0.7
-MAX_RESPONSE_LENGTH=2000
-```
+
+---MAX_RESPONSE_LENGTH=2000
+
+````
+
+**Built with ❤️ using NVIDIA AI • LangChain • Streamlit**
 
 #### **3.3 Validate Configuration**
 
