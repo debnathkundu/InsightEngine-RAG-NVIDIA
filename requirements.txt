@@ -22,6 +22,9 @@ faiss-cpu>=1.7.0
 # Hybrid search (BM25 + Vector search)
 rank-bm25>=0.2.2
 
+# Document re-ranking with cross-encoders
+sentence-transformers>=2.2.0
+
 # Environment management
 python-dotenv>=1.0.0
 

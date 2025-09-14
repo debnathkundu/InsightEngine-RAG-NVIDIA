@@ -24,6 +24,7 @@ from langchain_core.outputs import Generation, LLMResult
 from .document_loader import DocumentLoader
 from .nvidia_embeddings import NVIDIAEmbeddings
 from .vector_database import VectorDatabase
+from .document_reranker import DocumentReranker, create_reranker_from_env
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -260,7 +261,10 @@ class RAGAgent:
         chunk_overlap: int = 200,
         status_callback=None,
         enable_memory: bool = True,
-        memory_window_size: int = 10
+        memory_window_size: int = 10,
+        enable_reranking: bool = True,
+        reranking_top_k: int = 5,
+        initial_retrieval_k: int = 20
     ):
         """
         Initialize RAG Agent
@@ -274,6 +278,9 @@ class RAGAgent:
             status_callback: Optional callback for status updates
             enable_memory: Whether to enable conversational memory
             memory_window_size: Number of conversation turns to remember
+            enable_reranking: Whether to enable document re-ranking with cross-encoder
+            reranking_top_k: Number of documents to return after re-ranking
+            initial_retrieval_k: Number of documents to retrieve before re-ranking
         """
         self.docs_folder = docs_folder
         self.api_key = api_key
@@ -282,6 +289,9 @@ class RAGAgent:
         self.chunk_overlap = chunk_overlap
         self.enable_memory = enable_memory
         self.memory_window_size = memory_window_size
+        self.enable_reranking = enable_reranking
+        self.reranking_top_k = reranking_top_k
+        self.initial_retrieval_k = initial_retrieval_k
         
         # Initialize components
         self.document_loader = DocumentLoader(docs_folder)
@@ -294,6 +304,17 @@ class RAGAgent:
             bm25_weight=0.3,
             vector_weight=0.7
         )
+        
+        # Initialize document re-ranker
+        logger.info("🎯 Initializing DocumentReranker...")
+        self.reranker = create_reranker_from_env()
+        logger.info(f"✅ Re-ranker initialized - Available: {self.reranker.is_available()}")
+        logger.info(f"   - Enable re-ranking: {self.enable_reranking}")
+        logger.info(f"   - Re-ranking top_k: {self.reranking_top_k}")
+        logger.info(f"   - Initial retrieval_k: {self.initial_retrieval_k}")
+        if self.reranker:
+            model_info = self.reranker.get_model_info()
+            logger.info(f"   - Model info: {model_info}")
         
         # Initialize both LLM wrappers for flexibility
         self.llm = SimpleNVIDIALLM(api_key)  # For backward compatibility
@@ -411,28 +432,36 @@ Answer: """
             
             # Setup conversational retrieval chain for follow-up questions
             if self.enable_memory and self.memory:
-                self.conversational_chain = ConversationalRetrievalChain.from_llm(
-                    llm=self.langchain_llm,
-                    retriever=retriever,
-                    memory=self.memory,
-                    return_source_documents=True,
-                    verbose=False,
-                    combine_docs_chain_kwargs={
-                        "prompt": PromptTemplate(
-                            template=self.conversational_prompt_template,
-                            input_variables=["context", "chat_history", "question"]
-                        )
-                    }
-                )
+                try:
+                    self.conversational_chain = ConversationalRetrievalChain.from_llm(
+                        llm=self.langchain_llm,
+                        retriever=retriever,
+                        memory=self.memory,
+                        return_source_documents=True,
+                        verbose=False,
+                        combine_docs_chain_kwargs={
+                            "prompt": PromptTemplate(
+                                template=self.conversational_prompt_template,
+                                input_variables=["context", "chat_history", "question"]
+                            )
+                        }
+                    )
+                    logger.info("✅ Conversational retrieval chain initialized successfully")
+                except Exception as conv_e:
+                    logger.error(f"Failed to setup conversational chain: {str(conv_e)}")
+                    logger.warning("Conversational chain setup failed - will use basic mode with manual memory")
+                    self.conversational_chain = None
+                    # Don't disable memory entirely, we can still use manual memory management
                 
             logger.info("✅ LangChain retrieval chains initialized with hybrid search support")
             
         except Exception as e:
             logger.error(f"Failed to setup chains: {str(e)}")
+            logger.error(f"Error details: {type(e).__name__}: {str(e)}")
             logger.warning("Chain setup failed - falling back to basic mode only")
             self.basic_chain = None
             self.conversational_chain = None
-            self.enable_memory = False
+            # Don't disable memory completely - we can still provide conversational experience manually
     
     def setup_knowledge_base(self, force_rebuild: bool = False) -> bool:
         """
@@ -598,21 +627,33 @@ Answer: """
                         logger.error(f"Traceback: {traceback.format_exc()}")
                         logger.warning(f"LangChain approach failed, using legacy method: {str(e)}")
 
-                # Legacy approach as final fallback - now with hybrid search support
-                # Try hybrid search first, fall back to vector search
+                # Legacy approach as final fallback - now with hybrid search and re-ranking support
                 try:
-                    source_docs = self.vector_db.hybrid_search(question, k=k)
-                    scores = None  # Hybrid search doesn't return scores directly
+                    # Use the enhanced get_relevant_documents method with re-ranking
+                    scored_docs = self.get_relevant_documents(
+                        query=question, 
+                        k=k, 
+                        use_hybrid=True, 
+                        use_reranking=True
+                    )
+                    source_docs = [doc for doc, score in scored_docs]
+                    scores = [score for doc, score in scored_docs]
                     
-                    if not source_docs:
-                        # Fall back to vector search with scores
-                        scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
-                        source_docs = [doc for doc, score in scored_docs]
-                        scores = [score for doc, score in scored_docs]
+                    # Log what retrieval method was used
+                    retrieval_method = []
+                    if self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever:
+                        retrieval_method.append("hybrid")
+                    else:
+                        retrieval_method.append("vector")
+                    
+                    if self.enable_reranking and self.reranker.is_available():
+                        retrieval_method.append("re-ranked")
+                    
+                    logger.info(f"Retrieved {len(source_docs)} documents using {'+'.join(retrieval_method)} search")
                         
                 except Exception as e:
-                    logger.warning(f"Hybrid search failed, using vector search: {str(e)}")
-                    # Fall back to vector search with scores
+                    logger.warning(f"Enhanced retrieval failed, using basic fallback: {str(e)}")
+                    # Basic fallback to vector search
                     scored_docs = self.vector_db.similarity_search_with_scores(question, k=k)
                     source_docs = [doc for doc, score in scored_docs]
                     scores = [score for doc, score in scored_docs]
@@ -648,7 +689,18 @@ Answer: """
                 answer = self.llm.generate_response(prompt)
 
                 processing_time = time.time() - start_time
-                search_method = "hybrid" if self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever else "vector"
+                
+                # Build search method description
+                search_methods = []
+                if self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever:
+                    search_methods.append("hybrid")
+                else:
+                    search_methods.append("vector")
+                
+                if self.enable_reranking and self.reranker.is_available():
+                    search_methods.append("re-ranked")
+                
+                search_method = "+".join(search_methods)
                 logger.info(f"Question answered using legacy approach with {search_method} search in {processing_time:.2f} seconds")
 
                 return RAGResponse(
@@ -670,30 +722,105 @@ Answer: """
                 chat_history=chat_history
             )
     
-    def get_relevant_documents(self, query: str, k: int = 4, use_hybrid: bool = True) -> List[Tuple[Document, float]]:
+    def get_relevant_documents(self, query: str, k: int = 4, use_hybrid: bool = True, use_reranking: bool = None) -> List[Tuple[Document, float]]:
         """
-        Get relevant documents for a query with similarity scores
+        Get relevant documents for a query with similarity scores and optional re-ranking
         
         Args:
             query: Search query
-            k: Number of documents to retrieve
+            k: Number of documents to retrieve (final number after re-ranking)
             use_hybrid: Whether to use hybrid search (if available)
+            use_reranking: Whether to use re-ranking (defaults to instance setting)
             
         Returns:
-            List of (document, score) tuples. Note: hybrid search may return (document, None) tuples
+            List of (document, score) tuples. 
+            - For hybrid search without reranking: (document, None) tuples
+            - For vector search: (document, similarity_score) tuples  
+            - For reranked results: (document, relevance_score) tuples
         """
         try:
+            logger.info(f"🔍 get_relevant_documents() called:")
+            logger.info(f"   - Query: '{query[:50]}{'...' if len(query) > 50 else ''}'")
+            logger.info(f"   - Requested k: {k}")
+            logger.info(f"   - Use hybrid: {use_hybrid}")
+            logger.info(f"   - Use reranking param: {use_reranking}")
+            
+            # Determine if we should use re-ranking
+            should_rerank = use_reranking if use_reranking is not None else (
+                self.enable_reranking and self.reranker.is_available()
+            )
+            
+            logger.info(f"🎯 Re-ranking decision:")
+            logger.info(f"   - Should re-rank: {should_rerank}")
+            logger.info(f"   - Instance enable_reranking: {self.enable_reranking}")
+            logger.info(f"   - Reranker available: {self.reranker.is_available() if self.reranker else 'None'}")
+            
+            # Determine how many documents to retrieve initially
+            initial_k = self.initial_retrieval_k if should_rerank else k
+            logger.info(f"📊 Retrieval plan:")
+            logger.info(f"   - Initial retrieval k: {initial_k}")
+            logger.info(f"   - Final k after re-ranking: {k}")
+            
+            # Step 1: Initial retrieval using hybrid or vector search
+            logger.info("🔎 Step 1: Initial document retrieval...")
+            
+            # Try to load vector database if not already loaded
+            if not self.vector_db.vectorstore:
+                logger.info("   - Vector database not loaded, attempting to load...")
+                if not self.vector_db.load_index():
+                    logger.warning("   - Failed to load vector database index")
+                else:
+                    logger.info("   - Vector database loaded successfully")
+            
             if use_hybrid and self.vector_db.enable_hybrid_search and self.vector_db.ensemble_retriever:
                 # Use hybrid search (scores not available)
-                docs = self.vector_db.hybrid_search(query, k=k)
-                return [(doc, None) for doc in docs]
+                logger.info(f"   - Using hybrid search (BM25 + Vector)")
+                initial_docs = self.vector_db.hybrid_search(query, k=initial_k)
+                initial_docs_with_scores = [(doc, None) for doc in initial_docs]
+                logger.info(f"   - Retrieved {len(initial_docs)} documents via hybrid search")
             else:
                 # Use vector search with scores
-                return self.vector_db.similarity_search_with_scores(query, k=k)
+                logger.info(f"   - Using vector search only")
+                initial_docs_with_scores = self.vector_db.similarity_search_with_scores(query, k=initial_k)
+                initial_docs = [doc for doc, score in initial_docs_with_scores]
+                logger.info(f"   - Retrieved {len(initial_docs)} documents via vector search")
+            
+            # Step 2: Apply re-ranking if enabled and available
+            logger.info("🎯 Step 2: Re-ranking evaluation...")
+            if should_rerank and initial_docs:
+                logger.info(f"✅ Proceeding with re-ranking:")
+                logger.info(f"   - Input documents: {len(initial_docs)}")
+                logger.info(f"   - Target output: {k}")
+                
+                reranked_docs, rerank_scores = self.reranker.rerank_documents(
+                    query=query,
+                    documents=initial_docs,
+                    top_k=k,
+                    initial_k=len(initial_docs)
+                )
+                
+                logger.info(f"✅ Re-ranking completed - returning {len(reranked_docs)} documents")
+                return [(doc, score) for doc, score in zip(reranked_docs, rerank_scores)]
+            else:
+                if not should_rerank:
+                    logger.info("❌ Re-ranking skipped - not enabled or not available")
+                elif not initial_docs:
+                    logger.info("❌ Re-ranking skipped - no initial documents")
+                
+                logger.info(f"🔄 Returning initial results (limited to {k})")
+                # Return initial results (limited to k)
+                result = initial_docs_with_scores[:k]
+                logger.info(f"   - Returning {len(result)} documents without re-ranking")
+                return result
+                
         except Exception as e:
             logger.error(f"Error getting relevant documents: {str(e)}")
-            # Fall back to vector search
-            return self.vector_db.similarity_search_with_scores(query, k=k)
+            # Fall back to vector search without re-ranking
+            try:
+                return self.vector_db.similarity_search_with_scores(query, k=k)
+            except Exception as fallback_e:
+                logger.error(f"Fallback also failed: {str(fallback_e)}")
+                return []
     
     def get_knowledge_base_stats(self) -> Dict[str, Any]:
         """
@@ -767,10 +894,11 @@ Answer: """
     
     def is_conversational_mode_enabled(self) -> bool:
         """Check if conversational mode is enabled and working"""
+        # Conversational mode is enabled if we have memory (even without LangChain conversational chain)
+        # We can provide conversational experience through manual memory management
         return (
             self.enable_memory and 
             self.memory is not None and 
-            self.conversational_chain is not None and
             self.langchain_llm is not None
         )
     
@@ -779,6 +907,14 @@ Answer: """
         return (
             self.vector_db.enable_hybrid_search and 
             self.vector_db.ensemble_retriever is not None
+        )
+    
+    def is_reranking_enabled(self) -> bool:
+        """Check if re-ranking is enabled and working"""
+        return (
+            self.enable_reranking and 
+            self.reranker is not None and 
+            self.reranker.is_available()
         )
     
     def configure_hybrid_search(self, bm25_weight: float = 0.3, vector_weight: float = 0.7) -> bool:
@@ -817,6 +953,47 @@ Answer: """
             
         except Exception as e:
             logger.error(f"Failed to configure hybrid search: {str(e)}")
+            return False
+    
+    def configure_reranking(self, enable: bool = None, top_k: int = None, initial_k: int = None) -> bool:
+        """
+        Configure re-ranking settings
+        
+        Args:
+            enable: Whether to enable re-ranking
+            top_k: Number of documents to return after re-ranking
+            initial_k: Number of documents to retrieve before re-ranking
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if enable is not None:
+                old_setting = self.enable_reranking
+                self.enable_reranking = enable
+                if old_setting != enable:
+                    logger.info(f"✅ Re-ranking {'enabled' if enable else 'disabled'}")
+            
+            if top_k is not None:
+                if top_k > 0:
+                    self.reranking_top_k = top_k
+                    logger.info(f"✅ Re-ranking top_k updated to: {top_k}")
+                else:
+                    logger.error("top_k must be greater than 0")
+                    return False
+            
+            if initial_k is not None:
+                if initial_k > 0:
+                    self.initial_retrieval_k = initial_k
+                    logger.info(f"✅ Initial retrieval k updated to: {initial_k}")
+                else:
+                    logger.error("initial_k must be greater than 0")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to configure re-ranking: {str(e)}")
             return False
     
     def add_documents_to_knowledge_base(self, new_docs_folder: Optional[str] = None) -> bool:
@@ -1074,6 +1251,13 @@ Answer: """
             # Check file watcher
             health["components"]["file_watcher"] = {
                 "status": "active" if self.file_watcher_observer and self.file_watcher_observer.is_alive() else "inactive"
+            }
+            
+            # Check re-ranker
+            health["components"]["reranker"] = {
+                "status": "available" if self.reranker.is_available() else "unavailable",
+                "enabled": self.enable_reranking,
+                "model_info": self.reranker.get_model_info() if self.reranker else {}
             }
             
             # Check documents folder

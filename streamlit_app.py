@@ -457,27 +457,64 @@ def initialize_rag_agent():
                 st.error(f"❌ NVIDIA API connection failed: {str(e)}")
                 return None
 
-        # Initialize RAG agent
+        # Initialize RAG agent with conversational mode enabled
         with st.spinner("🤖 Initializing RAG Agent..."):
             try:
                 # Try to initialize with status callback for vector DB notifications
-                rag_agent = RAGAgent(docs_folder, api_key, status_callback=status_callback)
+                rag_agent = RAGAgent(
+                    docs_folder, 
+                    api_key, 
+                    status_callback=status_callback,
+                    enable_memory=True,  # Enable conversational mode
+                    enable_reranking=True  # Enable re-ranking
+                )
             except TypeError:
                 # Fallback if status_callback parameter is not supported
-                rag_agent = RAGAgent(docs_folder, api_key)
+                rag_agent = RAGAgent(
+                    docs_folder, 
+                    api_key,
+                    enable_memory=True,  # Enable conversational mode
+                    enable_reranking=True  # Enable re-ranking
+                )
 
         # Setup knowledge base
         with st.spinner("📚 Loading knowledge base..."):
             if rag_agent.setup_knowledge_base():
+                # Start file watcher for automatic document updates
+                with st.spinner("👀 Starting file watcher..."):
+                    try:
+                        if "file_watcher_observer" not in st.session_state:
+                            observer = start_file_watcher(rag_agent, docs_folder)
+                            if observer:
+                                st.session_state.file_watcher_observer = observer
+                                st.success("✅ File watcher started successfully!")
+                            else:
+                                st.warning("⚠️ File watcher could not be started")
+                    except Exception as e:
+                        st.warning(f"⚠️ File watcher startup failed: {str(e)}")
+                
                 st.success("✅ RAG system initialized successfully!")
                 
                 # Add initialization message to chat timeline
                 if "messages" not in st.session_state:
                     st.session_state.messages = []
                 
+                # Check system capabilities for status message
+                capabilities = []
+                if rag_agent.is_conversational_mode_enabled():
+                    capabilities.append("🧠 Conversational Memory")
+                if rag_agent.is_hybrid_search_enabled():
+                    capabilities.append("🔍 Hybrid Search")
+                if rag_agent.is_reranking_enabled():
+                    capabilities.append("🎯 Document Re-ranking")
+                if "file_watcher_observer" in st.session_state:
+                    capabilities.append("👀 File Watcher")
+                
+                capabilities_text = "\n".join([f"• {cap}" for cap in capabilities])
+                
                 init_message = {
                     "role": "system",
-                    "content": "🚀 **System Initialization Complete**\n\nRAG Assistant has been successfully initialized and is ready to answer your questions about your document collection!",
+                    "content": f"🚀 **System Initialization Complete**\n\nRAG Assistant has been successfully initialized with the following capabilities:\n\n{capabilities_text}\n\nReady to answer your questions about your document collection!",
                     "timestamp": datetime.now(),
                     "type": "system_init"
                 }
@@ -716,13 +753,21 @@ def display_sidebar(rag_agent):
         with kb_col2:
             st.metric("Files", docs_status.get("files_available", 0))
         
-        # File watcher status
-        watcher_status = components.get("file_watcher", {})
-        if watcher_status.get("status") == "active":
-            st.sidebar.success("🟢 File Watcher Active")
-            st.sidebar.info("🔄 Auto-updates enabled")
+        # File watcher status - check if observer is running
+        if "file_watcher_observer" in st.session_state:
+            observer = st.session_state.file_watcher_observer
+            if observer and observer.is_alive():
+                st.sidebar.success("🟢 File Watcher Active")
+                st.sidebar.info("🔄 Auto-updates enabled")
+            else:
+                st.sidebar.warning("🟡 File Watcher Stopped")
         else:
-            st.sidebar.warning("🟡 File Watcher Inactive")
+            watcher_status = components.get("file_watcher", {})
+            if watcher_status.get("status") == "active":
+                st.sidebar.success("🟢 File Watcher Active")
+                st.sidebar.info("🔄 Auto-updates enabled")
+            else:
+                st.sidebar.warning("🟡 File Watcher Inactive")
         
         # System actions
         st.sidebar.markdown("### ⚙️ System Actions")
@@ -800,16 +845,34 @@ def display_sidebar(rag_agent):
         if hasattr(rag_agent, 'is_conversational_mode_enabled') and rag_agent.is_conversational_mode_enabled():
             st.sidebar.success("🟢 Memory Active")
             
-            # Show conversation history info
-            if hasattr(rag_agent, 'get_conversation_history'):
-                try:
-                    conv_history = rag_agent.get_conversation_history()
-                    if conv_history:
-                        st.sidebar.info(f"💭 Remembering {len(conv_history)} conversation exchanges")
-                    else:
-                        st.sidebar.info("💭 No conversation history yet")
-                except:
-                    pass
+            # Show conversation history info - count actual chat conversations from session state
+            conversation_count = 0
+            if "messages" in st.session_state and st.session_state.messages:
+                # Find the last memory clear to only count valid conversations
+                last_memory_clear_index = -1
+                for i, msg in enumerate(st.session_state.messages):
+                    if (msg["role"] == "system" and 
+                        msg.get("type") == "memory_update" and 
+                        msg.get("status_type") == "memory_cleared"):
+                        last_memory_clear_index = i
+                
+                # Count user-assistant conversation pairs after last memory clear
+                user_count = 0
+                assistant_count = 0
+                for i, msg in enumerate(st.session_state.messages):
+                    if i > last_memory_clear_index:
+                        if msg["role"] == "user" and msg.get("type") == "chat":
+                            user_count += 1
+                        elif msg["role"] == "assistant" and msg.get("type") == "chat":
+                            assistant_count += 1
+                
+                # Conversation count is the minimum of user and assistant messages
+                conversation_count = min(user_count, assistant_count)
+            
+            if conversation_count > 0:
+                st.sidebar.info(f"💭 Remembering {conversation_count} conversation exchanges")
+            else:
+                st.sidebar.info("💭 No conversation history yet")
             
             # Memory controls
             memory_col1, memory_col2 = st.sidebar.columns(2)
@@ -1890,6 +1953,24 @@ def display_web_import():
         st.caption(f"Showing {min(10, len(recent_files))} of {len(recent_files)} files in knowledge base")
     else:
         st.info("No files found in the knowledge base. Import some files to get started!")
+
+def cleanup_file_watcher():
+    """Clean up file watcher observer on app shutdown"""
+    if "file_watcher_observer" in st.session_state:
+        try:
+            observer = st.session_state.file_watcher_observer
+            if observer and observer.is_alive():
+                observer.stop()
+                observer.join(timeout=2)
+                print("🛑 File watcher stopped successfully")
+        except Exception as e:
+            print(f"Error stopping file watcher: {e}")
+        finally:
+            del st.session_state.file_watcher_observer
+
+# Register cleanup function
+import atexit
+atexit.register(cleanup_file_watcher)
 
 if __name__ == "__main__":
     main()

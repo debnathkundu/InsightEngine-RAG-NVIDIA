@@ -15,6 +15,8 @@ A **production-ready, enterprise-grade RAG (Retrieval-Augmented Generation)** sy
 
 - **NVIDIA AI Integration**: Powered by `nvidia/nv-embed-v1` embeddings and `meta/llama-3.1-8b-instruct` LLM
 - **Advanced RAG Pipeline**: Intelligent document chunking, semantic search, and context-aware retrieval
+- **Hybrid Search**: Combines BM25 keyword matching (30%) + vector similarity (70%) for optimal retrieval
+- **Document Re-ranking**: Cross-encoder models re-rank retrieved documents for maximum relevance
 - **Multiple Document Formats**: PDF, DOCX, PPTX, TXT, and RTF support with auto-detection
 - **Semantic Vector Search**: FAISS-based similarity search with persistence and optimization
 
@@ -639,7 +641,7 @@ RAG-Template-for-NVIDIA-nemoretriever/
 | **Source Attribution**    | Transparency       | Document tracking, page references, relevance scoring     |
 | **Fallback Mechanisms**   | Reliability        | Graceful degradation, error recovery, basic mode support  |
 
-### **📊 Data Flow Architecture**
+### **📊 Enhanced Data Flow Architecture with Re-ranking**
 
 ```mermaid
 sequenceDiagram
@@ -647,15 +649,18 @@ sequenceDiagram
     participant W as 🌐 Web Interface
     participant R as 🤖 RAG Agent
     participant E as 🧮 NVIDIA Embeddings
-    participant V as 🗄️ Vector DB
+    participant V as 🗄️ Vector DB (Hybrid)
+    participant X as 🎯 Re-ranker
     participant M as 🧠 Memory
     participant F as 📊 Feedback
 
     U->>W: Ask Question
     W->>R: Process Query
     R->>E: Generate Query Embedding
-    E->>V: Search Similar Vectors
-    V->>R: Return Relevant Chunks
+    E->>V: Hybrid Search (BM25 + Vector)
+    V->>R: Return 20 Initial Documents
+    R->>X: Re-rank Documents
+    X->>R: Return Top 5 Best Matches
     R->>M: Check Conversation History
     M->>R: Provide Context
     R->>E: Generate Response with Context
@@ -664,6 +669,41 @@ sequenceDiagram
     W->>U: Display Answer
     U->>F: Provide Feedback (👍/👎)
     F->>W: Update Analytics
+```
+
+### **🎯 Advanced Re-ranking System**
+
+Our RAG system now includes **state-of-the-art document re-ranking** using cross-encoder models for maximum relevance:
+
+#### **How Re-ranking Works**
+
+1. **Initial Retrieval**: Hybrid search retrieves top 20 documents using BM25 + vector similarity
+2. **Cross-encoder Analysis**: Advanced models analyze query-document pairs for true relevance
+3. **Precision Selection**: Returns the 5 most relevant documents for final response generation
+4. **Quality Improvement**: Significantly better document selection compared to similarity alone
+
+#### **Benefits of Re-ranking**
+
+- **🎯 Higher Precision**: Better document relevance through sophisticated relevance modeling
+- **🧠 Contextual Understanding**: Cross-encoders understand complex query-document relationships
+- **⚡ Efficient Processing**: Re-rank only top candidates, maintaining speed
+- **🔧 Configurable**: Adjustable initial retrieval size and final selection count
+- **🛡️ Fallback Safe**: Gracefully degrades to hybrid search if re-ranking unavailable
+
+#### **Re-ranking Configuration**
+
+```bash
+# Enable/disable re-ranking
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2  # Model for re-ranking
+RERANKER_MAX_LENGTH=512                              # Max sequence length
+RERANKER_DEVICE=cpu                                  # cpu or cuda
+
+# Runtime configuration via RAGAgent
+rag_agent.configure_reranking(
+    enable=True,       # Enable re-ranking
+    top_k=5,          # Final documents to return
+    initial_k=20      # Initial documents to re-rank
+)
 ```
 
 ### **🔄 File Processing Workflow**
@@ -938,6 +978,11 @@ MAX_CHUNKS_PER_DOC=50                        # Limit chunks per document
 SIMILARITY_THRESHOLD=0.7                     # Minimum similarity for retrieval
 MAX_RESPONSE_LENGTH=2000                     # Maximum AI response length
 BATCH_SIZE=10                                # Embedding batch size
+
+# Re-ranking Configuration (NEW)
+RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2  # Cross-encoder model for re-ranking
+RERANKER_MAX_LENGTH=512                      # Maximum sequence length for re-ranker
+RERANKER_DEVICE=cpu                          # Device for re-ranker (cpu/cuda)
 ```
 
 #### **Streamlit Configuration (.streamlit/config.toml)**
@@ -1512,6 +1557,12 @@ questions = [
 # Full system validation
 python test_rag_system.py
 
+# Test hybrid search functionality
+python test_hybrid_search.py
+
+# NEW: Test re-ranking functionality
+python test_reranking.py
+
 # Expected output:
 # 🧪 Starting RAG Template System Tests
 # ✅ Environment Setup PASSED
@@ -1519,6 +1570,8 @@ python test_rag_system.py
 # ✅ Document Loader PASSED
 # ✅ Vector Database PASSED
 # ✅ RAG Agent PASSED
+# ✅ Hybrid Search PASSED
+# ✅ Re-ranking System PASSED
 # 🎉 All tests passed! Your RAG template is ready to use.
 ```
 

@@ -247,7 +247,7 @@ class VectorDatabase:
                 str(self.db_path),
                 self.embeddings,
                 self.index_name,
-                # allow_dangerous_deserialization=True
+                allow_dangerous_deserialization=True
             )
             
             # Load BM25 data if hybrid search is enabled and file exists
