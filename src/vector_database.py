@@ -6,6 +6,7 @@ Handles local vector storage using FAISS for document embeddings
 import os
 import pickle
 import logging
+import threading
 from typing import List, Optional, Tuple, Dict, Any
 from pathlib import Path
 
@@ -60,6 +61,9 @@ class VectorDatabase:
         self.ensemble_retriever: Optional[EnsembleRetriever] = None
         self.documents_corpus: List[Document] = []  # Store documents for BM25
         
+        # Thread safety lock for concurrent operations
+        self._lock = threading.RLock()
+        
         # Create database directory
         self.db_path.mkdir(parents=True, exist_ok=True)
         
@@ -113,6 +117,47 @@ class VectorDatabase:
             
         except Exception as e:
             logger.error(f"Failed to create vector index: {str(e)}")
+            return False
+    
+    def create_empty_index(self) -> bool:
+        """
+        Create an empty vector index structure ready to accept documents
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            logger.info("Creating empty vector index structure...")
+            
+            # Initialize empty document corpus
+            self.documents_corpus = []
+            
+            # Create empty FAISS vectorstore with a dummy document to establish structure
+            dummy_text = "Placeholder text for empty index initialization"
+            dummy_metadata = {"source": "empty_placeholder", "page": 0}
+            
+            # Create vectorstore with dummy document
+            self.vectorstore = FAISS.from_texts(
+                texts=[dummy_text],
+                embedding=self.embeddings,
+                metadatas=[dummy_metadata]
+            )
+            
+            # Remove the dummy document immediately
+            # FAISS doesn't have a direct delete method, so we'll clear and prepare for real documents
+            # The structure is now established and ready for actual documents
+            
+            # Initialize empty BM25 components if hybrid search is enabled
+            if self.enable_hybrid_search:
+                self.bm25_retriever = None
+                self.ensemble_retriever = None
+                self.bm25_corpus = []
+            
+            logger.info("✅ Empty vector index structure created successfully!")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to create empty vector index: {str(e)}")
             return False
     
     def _create_bm25_index(self, documents: List[Document]) -> bool:
@@ -178,26 +223,27 @@ class VectorDatabase:
         Returns:
             True if successful, False otherwise
         """
-        if not self.vectorstore:
-            logger.error("No vector index to save")
-            return False
-        
-        try:
-            logger.info("Saving vector index to disk...")
+        with self._lock:
+            if not self.vectorstore:
+                logger.error("No vector index to save")
+                return False
             
-            # Save FAISS index
-            self.vectorstore.save_local(str(self.db_path), self.index_name)
-            
-            # Save BM25 data if hybrid search is enabled
-            if self.enable_hybrid_search and self.bm25_retriever:
-                self._save_bm25_index()
-            
-            logger.info(f"✅ Vector index saved to: {self.db_path}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to save vector index: {str(e)}")
-            return False
+            try:
+                logger.info("Saving vector index to disk...")
+                
+                # Save FAISS index
+                self.vectorstore.save_local(str(self.db_path), self.index_name)
+                
+                # Save BM25 data if hybrid search is enabled
+                if self.enable_hybrid_search and self.bm25_retriever:
+                    self._save_bm25_index()
+                
+                logger.info(f"✅ Vector index saved to: {self.db_path}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to save vector index: {str(e)}")
+                return False
     
     def _save_bm25_index(self) -> bool:
         """
@@ -305,34 +351,45 @@ class VectorDatabase:
             logger.warning("No documents provided to add")
             return False
         
-        try:
-            if not self.vectorstore:
-                logger.info("No existing index, creating new one...")
-                return self.create_index(documents)
-            
-            logger.info(f"Adding {len(documents)} documents to existing index...")
-            
-            # Add to documents corpus for BM25
-            self.documents_corpus.extend(documents)
-            
-            # Extract texts and metadata
-            texts = [doc.page_content for doc in documents]
-            metadatas = [doc.metadata for doc in documents]
-            
-            # Add to vectorstore
-            self.vectorstore.add_texts(texts=texts, metadatas=metadatas)
-            
-            # Update BM25 index if hybrid search is enabled
-            if self.enable_hybrid_search:
-                self._update_bm25_index()
-                self._create_ensemble_retriever()
-            
-            logger.info("✅ Documents added successfully!")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to add documents: {str(e)}")
-            return False
+        with self._lock:
+            try:
+                if not self.vectorstore:
+                    logger.info("No existing index, creating new one...")
+                    return self.create_index(documents)
+                
+                # Check if this is the first real documents being added to an empty index
+                is_empty_index = (len(self.documents_corpus) == 0 and 
+                                hasattr(self, 'documents_corpus') and 
+                                isinstance(self.documents_corpus, list))
+                
+                if is_empty_index:
+                    logger.info(f"Adding first {len(documents)} documents to empty index...")
+                    # Replace the empty index with a proper one
+                    return self.create_index(documents)
+                
+                logger.info(f"Adding {len(documents)} documents to existing index...")
+                
+                # Add to documents corpus for BM25
+                self.documents_corpus.extend(documents)
+                
+                # Extract texts and metadata
+                texts = [doc.page_content for doc in documents]
+                metadatas = [doc.metadata for doc in documents]
+                
+                # Add to vectorstore
+                self.vectorstore.add_texts(texts=texts, metadatas=metadatas)
+                
+                # Update BM25 index if hybrid search is enabled
+                if self.enable_hybrid_search:
+                    self._update_bm25_index()
+                    self._create_ensemble_retriever()
+                
+                logger.info("✅ Documents added successfully!")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to add documents: {str(e)}")
+                return False
     
     def _update_bm25_index(self) -> bool:
         """
@@ -379,12 +436,18 @@ class VectorDatabase:
             docs_to_delete_count = 0
             
             # Iterate through all documents in the vectorstore
-            for doc_id in self.vectorstore.docstore._dict.keys():
-                doc = self.vectorstore.docstore._dict[doc_id]
-                if doc.metadata.get("source") == source_file:
-                    docs_to_delete_count += 1
-                else:
-                    all_docs.append(doc)
+            # Note: Accessing internal docstore structure as FAISS doesn't provide public API
+            if hasattr(self.vectorstore.docstore, '_dict'):
+                docstore_dict = getattr(self.vectorstore.docstore, '_dict')
+                for doc_id in docstore_dict.keys():
+                    doc = docstore_dict[doc_id]
+                    if doc.metadata.get("source") == source_file:
+                        docs_to_delete_count += 1
+                    else:
+                        all_docs.append(doc)
+            else:
+                logger.warning("Cannot access docstore structure for document removal")
+                return False
 
             if docs_to_delete_count == 0:
                 logger.info(f"No documents found with source: {source_file}")
@@ -573,7 +636,7 @@ class VectorDatabase:
             logger.error(f"Search with scores failed: {str(e)}")
             return []
     
-    def get_retriever(self, use_hybrid: bool = None, k: int = 4):
+    def get_retriever(self, use_hybrid: Optional[bool] = None, k: int = 4):
         """
         Get the appropriate retriever based on configuration
         
@@ -600,7 +663,8 @@ class VectorDatabase:
                 self.bm25_retriever.k = k
             
             vector_retriever = self.vectorstore.as_retriever(search_kwargs={"k": k})
-            self.ensemble_retriever.retrievers[1] = vector_retriever
+            if self.ensemble_retriever and hasattr(self.ensemble_retriever, 'retrievers'):
+                self.ensemble_retriever.retrievers[1] = vector_retriever
             
             logger.debug("Using hybrid ensemble retriever")
             return self.ensemble_retriever

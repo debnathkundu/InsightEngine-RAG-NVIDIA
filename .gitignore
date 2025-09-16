@@ -1,5 +1,5 @@
 # Environment variables
-.env
+# .env #Commented to test streamlit sharing
 
 # Python
 __pycache__/
@@ -22,11 +22,13 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.pyc
 
 # Virtual environments
 venv/
 env/
 ENV/
+.venv/
 
 # Vector database
 vector_db/
@@ -43,6 +45,8 @@ Data/Docs/
 .idea/
 *.swp
 *.swo
+.spyderproject
+.spyproject
 
 # OS
 .DS_Store
@@ -56,3 +60,36 @@ Data/
 
 # Ignore backup files
 streamlit_app_backup.py
+*_backup.py
+*.bak
+
+# Temporary files and directories
+temp/
+tmp/
+temp_backup/
+*.tmp
+*.temp
+
+# Implementation notes and temporary docs
+*_IMPLEMENTATION.md
+*_FIX_COMPLETE.md
+*_NOTES.md
+
+# Scraped content files in root
+*.txt
+!requirements*.txt
+!README*.txt
+
+# System files
+.coverage
+.pytest_cache/
+.mypy_cache/
+.tox/
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Log files
+*.log
+logs/

@@ -11,10 +11,22 @@ import shutil
 import logging
 from urllib.parse import urlparse, unquote
 from pathlib import Path
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
 from datetime import datetime
 import uuid
+import re
+
+# Try to import beautifulsoup4 for web scraping
+try:
+    from bs4 import BeautifulSoup
+    BEAUTIFULSOUP_AVAILABLE = True
+except ImportError:
+    BeautifulSoup = None  # type: ignore
+    BEAUTIFULSOUP_AVAILABLE = False
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -353,11 +365,159 @@ class WebImporter:
         
         size_names = ["B", "KB", "MB", "GB"]
         i = 0
-        while size_bytes >= 1024 and i < len(size_names) - 1:
-            size_bytes /= 1024.0
+        size_float = float(size_bytes)
+        while size_float >= 1024 and i < len(size_names) - 1:
+            size_float /= 1024.0
             i += 1
         
-        return f"{size_bytes:.1f} {size_names[i]}"
+        return f"{size_float:.1f} {size_names[i]}"
+    
+    def scrape_webpage(self, url: str, custom_filename: Optional[str] = None) -> Tuple[bool, str, ImportRecord]:
+        """
+        Scrape content from a webpage and save as text file
+        
+        Args:
+            url: URL to scrape content from
+            custom_filename: Optional custom filename (without extension)
+            
+        Returns:
+            Tuple of (success, message, import_record)
+        """
+        import_record = ImportRecord(
+            timestamp=datetime.now(),
+            url=url,
+            filename="",
+            status="processing"
+        )
+        
+        try:
+            logger.info(f"Starting webpage scraping from: {url}")
+            
+            # Check if BeautifulSoup is available
+            if not BEAUTIFULSOUP_AVAILABLE:
+                error_msg = "BeautifulSoup4 not available. Please install it to use webpage scraping."
+                import_record.status = "failed"
+                import_record.error_message = error_msg
+                return False, error_msg, import_record
+            
+            # Validate URL
+            is_valid, validation_message, _ = self.is_valid_url(url)
+            if not is_valid:
+                import_record.status = "failed"
+                import_record.error_message = validation_message
+                return False, validation_message, import_record
+            
+            # Fetch webpage content
+            response = requests.get(url, headers=self.DEFAULT_HEADERS, timeout=30)
+            response.raise_for_status()
+            
+            # Parse HTML content
+            soup = BeautifulSoup(response.content, 'html.parser')  # type: ignore
+            
+            # Extract meaningful content
+            scraped_content = self._extract_webpage_content(soup, url)
+            
+            if not scraped_content.strip():
+                error_msg = "No meaningful content could be extracted from the webpage"
+                import_record.status = "failed"
+                import_record.error_message = error_msg
+                return False, error_msg, import_record
+            
+            # Generate filename
+            if custom_filename:
+                base_filename = f"{custom_filename}.txt"
+            else:
+                # Generate filename from URL
+                domain = urlparse(url).netloc.replace('www.', '')
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                base_filename = f"{domain}_scraped_{timestamp}.txt"
+            
+            # Ensure filename is unique
+            final_filename = self.get_unique_filename(base_filename)
+            local_path = self.docs_folder / final_filename
+            
+            # Save scraped content to file
+            with open(local_path, 'w', encoding='utf-8') as file:
+                file.write(scraped_content)
+            
+            # Update import record with success info
+            import_record.status = "success"
+            import_record.filename = final_filename
+            import_record.local_path = str(local_path)
+            import_record.file_size = local_path.stat().st_size
+            
+            success_msg = f"Successfully scraped and saved '{final_filename}' ({self.format_file_size(import_record.file_size)})"
+            logger.info(f"Webpage scraping completed: {local_path}")
+            
+            return True, success_msg, import_record
+            
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Network error while scraping: {str(e)}"
+            import_record.status = "failed"
+            import_record.error_message = error_msg
+            logger.error(f"Scraping failed: {error_msg}")
+            return False, error_msg, import_record
+            
+        except Exception as e:
+            error_msg = f"Webpage scraping failed: {str(e)}"
+            import_record.status = "failed"
+            import_record.error_message = error_msg
+            logger.error(f"Unexpected error during scraping: {error_msg}")
+            return False, error_msg, import_record
+    
+    def _extract_webpage_content(self, soup: Any, url: str) -> str:
+        """
+        Extract meaningful content from parsed HTML
+        
+        Args:
+            soup: BeautifulSoup parsed HTML
+            url: Original URL for reference
+            
+        Returns:
+            Extracted and cleaned text content
+        """
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "header", "footer", "aside"]):
+            script.decompose()
+        
+        # Get page title
+        title = soup.find('title')
+        title_text = title.get_text().strip() if title else "Untitled"
+        
+        # Try to find main content areas (common patterns)
+        main_content = None
+        
+        # Look for common content containers
+        content_selectors = [
+            'main', 'article', '[role="main"]', '.main-content', 
+            '.content', '.post-content', '.entry-content', '.article-content'
+        ]
+        
+        for selector in content_selectors:
+            main_content = soup.select_one(selector)
+            if main_content:
+                break
+        
+        # If no main content found, use body
+        if not main_content:
+            main_content = soup.find('body') or soup
+        
+        # Extract text content
+        text_content = main_content.get_text()
+        
+        # Clean up the text
+        lines = (line.strip() for line in text_content.splitlines())
+        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+        cleaned_text = '\n'.join(chunk for chunk in chunks if chunk)
+        
+        # Remove excessive whitespace
+        cleaned_text = re.sub(r'\n\s*\n', '\n\n', cleaned_text)
+        cleaned_text = re.sub(r' +', ' ', cleaned_text)
+        
+        # Format the final content
+        header_info = f"Title: {title_text}\nURL: {url}\nScraped on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n{'-' * 80}\n\n"
+        
+        return header_info + cleaned_text
     
     def batch_download(self, urls: List[str]) -> List[ImportRecord]:
         """
