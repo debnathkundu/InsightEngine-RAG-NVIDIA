@@ -198,11 +198,6 @@ class NVIDIALangChainLLM(LLM):
             generations.append([Generation(text=output)])
         
         return LLMResult(generations=generations)
-        return {
-            "model_name": self.model_name,
-            "max_tokens": self.max_tokens,
-            "temperature": self.temperature,
-        }
 
 
 class SimpleNVIDIALLM:
@@ -339,8 +334,9 @@ class RAGAgent:
         elif self.enable_memory and not self.langchain_llm:
             logger.warning("Conversational memory disabled due to LangChain LLM initialization failure")
         
-        # File watcher (will be started after knowledge base setup)
+        # File watcher - start immediately to monitor for documents
         self.file_watcher_observer = None
+        self.start_file_watcher()
 
         # Custom prompt templates
         self.prompt_template = """Use the following pieces of context to answer the question at the end.
@@ -476,10 +472,15 @@ Answer: """
         try:
             # Try to load existing index first
             if not force_rebuild and self.vector_db.load_index():
-                logger.info("✅ Loaded existing knowledge base")
-                return True
-            
-            logger.info("Building knowledge base from PDF documents...")
+                # Check if the loaded index actually has documents
+                if len(self.vector_db.documents_corpus) > 0:
+                    logger.info(f"✅ Loaded existing knowledge base with {len(self.vector_db.documents_corpus)} documents")
+                    return True
+                else:
+                    logger.info("Loaded index is empty, checking for new documents to process...")
+                    force_rebuild = True  # Force rebuild since index is empty but documents might exist
+
+            logger.info("Building knowledge base from documents...")
             
             # Load and process documents
             documents = self.document_loader.load_and_split(
@@ -488,12 +489,24 @@ Answer: """
             )
             
             if not documents:
-                logger.error("No documents found to build knowledge base")
-                return False
+                logger.warning("No documents found - initializing empty knowledge base")
+                # Create empty vector database structure
+                if not self.vector_db.create_empty_index():
+                    logger.error("Failed to create empty vector index")
+                    return False
+                
+                # Save empty index
+                if not self.vector_db.save_index():
+                    logger.error("Failed to save empty vector index")
+                    return False
+                
+                logger.info("✅ Empty knowledge base initialized - ready to receive documents")
+                
+                return True
             
             # Get document stats
             stats = self.document_loader.get_document_stats(documents)
-            logger.info(f"Loaded {stats['num_source_files']} PDF files with {stats['total_chunks']} chunks")
+            logger.info(f"Loaded {stats['num_source_files']} files with {stats['total_chunks']} chunks")
             
             # Create vector index
             if not self.vector_db.create_index(documents):
@@ -510,16 +523,11 @@ Answer: """
             # Setup LangChain retrieval chains now that vector store is ready
             self._setup_chains()
             
-            # Start file watcher for incremental updates
-            self.start_file_watcher()
-            
             return True
             
         except Exception as e:
             logger.error(f"Failed to setup knowledge base: {str(e)}")
             return False
-    
-
     
     def ask_question(self, question: str, k: int = 4, chat_history: Optional[List[Tuple[str, str]]] = None) -> RAGResponse:
         """
@@ -541,6 +549,16 @@ Answer: """
                 logger.error("Vector database not initialized. Please setup knowledge base first.")
                 return RAGResponse(
                     answer="Knowledge base not initialized. Please setup the knowledge base first.",
+                    source_documents=[],
+                    query=question,
+                    processing_time=time.time() - start_time
+                )
+            
+            # Check if knowledge base has any documents
+            stats = self.get_knowledge_base_stats()
+            if stats.get('total_documents', 0) == 0:
+                return RAGResponse(
+                    answer="I don't have any documents in my knowledge base yet. Please add some documents (PDF, DOCX, PPTX, or TXT files) to the Data/Docs folder, or use the Web Import feature to import documents from URLs, then I'll be able to answer questions about them.",
                     source_documents=[],
                     query=question,
                     processing_time=time.time() - start_time
@@ -830,6 +848,15 @@ Answer: """
             Dictionary with knowledge base statistics
         """
         vector_stats = self.vector_db.get_stats()
+        
+        # Normalize document count fields - use the most reliable source
+        documents_in_corpus = vector_stats.get("documents_in_corpus", 0)
+        doc_count = vector_stats.get("document_count", 0)
+        
+        # Use documents_in_corpus as the primary source of truth
+        total_docs = max(documents_in_corpus, doc_count)
+        vector_stats["total_documents"] = total_docs
+        vector_stats["total_chunks"] = total_docs  # Each document in corpus represents a chunk
         
         # Add document loader stats if available
         try:

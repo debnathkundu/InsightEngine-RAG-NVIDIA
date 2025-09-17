@@ -77,7 +77,7 @@ def render_feedback_buttons(message_id: str, current_feedback: Optional[str] = N
         else:
             st.caption("👆 Rate this response")
 
-def add_system_notification(notification_type: str, filename: str = "", details: dict = None):
+def add_system_notification(notification_type: str, filename: str = "", details: Optional[dict] = None):
     """Add a system notification to the session state"""
     if "system_notifications" not in st.session_state:
         st.session_state.system_notifications = []
@@ -237,7 +237,7 @@ def status_callback(update):
         # Log error but don't crash the application
         print(f"Status callback error: {e}")
 
-def display_system_message(notification_type: str, filename: str = "", details: dict = None):
+def display_system_message(notification_type: str, filename: str = "", details: Optional[dict] = None):
     """Display system messages (file operations, indexing updates, etc.)"""
     if details is None:
         details = {}
@@ -478,22 +478,21 @@ def initialize_rag_agent():
                 )
 
         # Setup knowledge base
-        with st.spinner("📚 Loading knowledge base..."):
-            if rag_agent.setup_knowledge_base():
-                # Start file watcher for automatic document updates
-                with st.spinner("👀 Starting file watcher..."):
-                    try:
-                        if "file_watcher_observer" not in st.session_state:
-                            observer = start_file_watcher(rag_agent, docs_folder)
-                            if observer:
-                                st.session_state.file_watcher_observer = observer
-                                st.success("✅ File watcher started successfully!")
-                            else:
-                                st.warning("⚠️ File watcher could not be started")
-                    except Exception as e:
-                        st.warning(f"⚠️ File watcher startup failed: {str(e)}")
-                
-                st.success("✅ RAG system initialized successfully!")
+        with st.spinner("📚 Setting up knowledge base..."):
+            setup_success = rag_agent.setup_knowledge_base()
+            
+            # Check if we have any documents
+            stats = rag_agent.get_knowledge_base_stats()
+            has_documents = stats.get('total_documents', 0) > 0
+            
+            if setup_success:
+                if has_documents:
+                    st.success("✅ RAG system initialized successfully!")
+                    system_status = "🚀 **System Ready**\n\nRAG Assistant is ready to answer questions about your document collection!"
+                else:
+                    st.success("✅ RAG system initialized - ready to receive documents!")
+                    st.info("💡 **Get Started**: Add documents to the Data/Docs folder or use the Web Import tab to import files.")
+                    system_status = "🚀 **System Ready**\n\nRAG Assistant is initialized and monitoring for documents. Add files to start asking questions!"
                 
                 # Add initialization message to chat timeline
                 if "messages" not in st.session_state:
@@ -507,14 +506,14 @@ def initialize_rag_agent():
                     capabilities.append("🔍 Hybrid Search")
                 if rag_agent.is_reranking_enabled():
                     capabilities.append("🎯 Document Re-ranking")
-                if "file_watcher_observer" in st.session_state:
+                if hasattr(rag_agent, 'file_watcher_observer') and rag_agent.file_watcher_observer:
                     capabilities.append("👀 File Watcher")
                 
                 capabilities_text = "\n".join([f"• {cap}" for cap in capabilities])
                 
                 init_message = {
                     "role": "system",
-                    "content": f"🚀 **System Initialization Complete**\n\nRAG Assistant has been successfully initialized with the following capabilities:\n\n{capabilities_text}\n\nReady to answer your questions about your document collection!",
+                    "content": f"{system_status}\n\n**Capabilities:**\n{capabilities_text}",
                     "timestamp": datetime.now(),
                     "type": "system_init"
                 }
@@ -522,8 +521,8 @@ def initialize_rag_agent():
                 
                 return rag_agent
             else:
-                st.error("❌ Failed to setup knowledge base")
-                st.info("Please ensure PDF files are in the Data/Docs folder.")
+                st.error("❌ Failed to initialize RAG system")
+                st.info("Please check the system configuration and try again.")
                 return None
 
     except Exception as e:
@@ -752,6 +751,20 @@ def display_sidebar(rag_agent):
             st.metric("Documents", vector_status.get("document_count", 0))
         with kb_col2:
             st.metric("Files", docs_status.get("files_available", 0))
+        
+        # Check for mismatch - files exist but not loaded into vector database
+        files_count = docs_status.get("files_available", 0)
+        docs_count = vector_status.get("document_count", 0)
+        if files_count > 0 and docs_count == 0:
+            st.sidebar.warning("⚠️ **Sync Issue Detected**")
+            st.sidebar.write(f"📁 {files_count} files found but not loaded into vector database")
+            if st.sidebar.button("🔄 **Fix Now - Rebuild Index**", key="sidebar_rebuild"):
+                with st.spinner("🏗️ Rebuilding knowledge base..."):
+                    if rag_agent and rag_agent.setup_knowledge_base(force_rebuild=True):
+                        st.sidebar.success("✅ Index rebuilt successfully!")
+                        st.rerun()
+                    else:
+                        st.sidebar.error("❌ Failed to rebuild index")
         
         # File watcher status - check if observer is running
         if "file_watcher_observer" in st.session_state:
@@ -1795,7 +1808,7 @@ def display_web_import():
     # Initialize web importer - use same folder as RAG system
     docs_folder = os.getenv("DOCS_FOLDER", "Data/Docs")
     data_folder = Path(docs_folder)
-    web_importer = WebImporter(data_folder)
+    web_importer = WebImporter(str(data_folder))
     
     # Show download location info
     st.info(f"📁 **Download Location:** Files will be saved to `{docs_folder}/` and automatically processed by the RAG system")
@@ -1844,6 +1857,75 @@ def display_web_import():
                 except Exception as e:
                     progress_bar.progress(0)
                     status_text.error(f"❌ Unexpected error: {str(e)}")
+    
+    st.markdown("---")
+    
+    # Webpage scraping section
+    st.subheader("🕷️ Web Page Scraping")
+    st.markdown("Extract text content from any webpage and save it as a document")
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        scrape_url_input = st.text_input(
+            "Enter webpage URL:", 
+            placeholder="https://example.com/article",
+            help="Scrape text content from any webpage (news articles, blog posts, documentation, etc.)"
+        )
+    
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # Add spacing
+        if st.button("🕷️ Scrape Page", type="primary", disabled=not scrape_url_input.strip()):
+            if scrape_url_input.strip():
+                # Progress bar and status
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                try:
+                    # Scrape the webpage
+                    with st.spinner("Scraping webpage content..."):
+                        success, message, import_record = web_importer.scrape_webpage(scrape_url_input.strip())
+                    
+                    if success:
+                        progress_bar.progress(1.0)
+                        status_text.success(f"✅ Successfully scraped: {import_record.filename}")
+                        st.balloons()
+                        
+                        # Show file details
+                        size_mb = import_record.file_size / (1024 * 1024) if import_record.file_size else 0
+                        st.info(f"**Saved to:** {import_record.local_path}\n**File size:** {size_mb:.2f} MB")
+                        
+                        # Show content preview
+                        if import_record.local_path and Path(import_record.local_path).exists():
+                            with st.expander("📖 Content Preview", expanded=False):
+                                try:
+                                    with open(import_record.local_path, 'r', encoding='utf-8') as f:
+                                        content = f.read()
+                                        preview = content[:1000] + "..." if len(content) > 1000 else content
+                                        st.text_area("Scraped content:", value=preview, height=200, disabled=True)
+                                except Exception as e:
+                                    st.error(f"Could not preview content: {str(e)}")
+                        
+                        # Clear input after successful scraping
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        progress_bar.progress(0)
+                        status_text.error(f"❌ Scraping failed: {message}")
+                        
+                except Exception as e:
+                    progress_bar.progress(0)
+                    status_text.error(f"❌ Unexpected error: {str(e)}")
+    
+    # Add note about webpage scraping
+    st.markdown("""
+    **ℹ️ Note:** Webpage scraping extracts text content from HTML pages and saves it as a .txt file. 
+    This is useful for capturing content from:
+    - News articles and blog posts
+    - Documentation and wikis  
+    - Academic papers published online
+    - Forums and discussion threads
+    """)
     
     st.markdown("---")
     
@@ -1937,6 +2019,7 @@ def display_web_import():
         - 📊 PowerPoint presentations (PPTX)
         - 📃 Text files (TXT)
         - 🖼️ Images (JPG, PNG, GIF, etc.)
+        - 🕷️ Any webpage (text content)
         """)
     
     st.markdown("---")
